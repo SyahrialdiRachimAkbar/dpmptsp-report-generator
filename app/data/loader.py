@@ -1,0 +1,798 @@
+"""
+Data Loader Module for DPMPTSP Reporting System
+
+This module handles reading and parsing Excel files containing
+NIB (Nomor Induk Berusaha) data from DPMPTSP Provinsi Lampung.
+"""
+
+import pandas as pd
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+
+
+@dataclass
+class NIBData:
+    """Data structure for NIB information per Kabupaten/Kota"""
+    kabupaten_kota: str
+    pma: int = 0
+    pmdn: int = 0
+    usaha_mikro: int = 0
+    usaha_kecil: int = 0
+    usaha_menengah: int = 0
+    usaha_besar: int = 0
+    total: int = 0
+    
+    @property
+    def umk(self) -> int:
+        """UMK = Usaha Mikro + Usaha Kecil"""
+        return self.usaha_mikro + self.usaha_kecil
+    
+    @property
+    def non_umk(self) -> int:
+        """NON-UMK = Usaha Menengah + Usaha Besar"""
+        return self.usaha_menengah + self.usaha_besar
+
+
+@dataclass
+class SektorResikoData:
+    """Data structure for risk-based permit data per Kabupaten/Kota"""
+    kabupaten_kota: str
+    # Risk levels
+    risiko_rendah: int = 0
+    risiko_menengah_rendah: int = 0
+    risiko_menengah_tinggi: int = 0
+    risiko_tinggi: int = 0
+    # Sectors
+    sektor_energi: int = 0
+    sektor_kelautan: int = 0
+    sektor_kesehatan: int = 0
+    sektor_komunikasi: int = 0
+    sektor_pariwisata: int = 0
+    sektor_perhubungan: int = 0
+    sektor_perindustrian: int = 0
+    sektor_pertanian: int = 0
+    total: int = 0
+    
+    @property
+    def total_risiko(self) -> int:
+        """Total all risk levels"""
+        return self.risiko_rendah + self.risiko_menengah_rendah + self.risiko_menengah_tinggi + self.risiko_tinggi
+
+
+class DataLoader:
+    """
+    Loader for DPMPTSP Excel data files.
+    
+    Supports two file formats:
+    1. Monthly files (e.g., "OLAH DATA OSS BULAN JULI 2025.xlsx")
+    2. Quarterly aggregate files (e.g., "OLAH DATA OSS BULANAN TW I 2025.xlsx")
+    """
+    
+    # Column mappings for NIB sheet
+    NIB_COLUMNS = {
+        'kabupaten_kota': 1,
+        'pma': 2,
+        'pmdn': 3,
+        'usaha_besar': 4,
+        'usaha_kecil': 5,
+        'usaha_menengah': 6,
+        'usaha_mikro': 7,
+        'total': 8
+    }
+    
+    # Known sheet names patterns
+    MONTHLY_SHEET_PATTERNS = [
+        r"PERIZINAN BERUSAHA (\w+)",
+        r"PB (\w+)",
+        r"SEKTOR & RESIKO (\w+)",
+        r"SEKTOR RESIKO (\w+)"
+    ]
+    
+    def __init__(self):
+        self.data_cache: Dict[str, pd.DataFrame] = {}
+    
+    def load_file(self, file_path: Path) -> Dict[str, pd.DataFrame]:
+        """
+        Load an Excel file and return all relevant sheets as DataFrames.
+        
+        Args:
+            file_path: Path to the Excel file
+            
+        Returns:
+            Dictionary mapping sheet names to DataFrames
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        xl = pd.ExcelFile(file_path)
+        sheets = {}
+        
+        for sheet_name in xl.sheet_names:
+            try:
+                df = pd.read_excel(xl, sheet_name=sheet_name, header=None, keep_default_na=False, na_values=[''])
+                sheets[sheet_name] = df
+            except Exception as e:
+                print(f"Warning: Could not load sheet '{sheet_name}': {e}")
+        
+        return sheets
+    
+    def load_file_from_bytes(self, file_bytes, filename: str = "") -> Dict[str, pd.DataFrame]:
+        """
+        Load an Excel file from bytes/BytesIO and return all relevant sheets as DataFrames.
+        
+        Args:
+            file_bytes: BytesIO object containing the Excel file
+            filename: Original filename for reference
+            
+        Returns:
+            Dictionary mapping sheet names to DataFrames
+        """
+        xl = pd.ExcelFile(file_bytes)
+        sheets = {}
+        
+        for sheet_name in xl.sheet_names:
+            try:
+                df = pd.read_excel(xl, sheet_name=sheet_name, header=None, keep_default_na=False, na_values=[''])
+                sheets[sheet_name] = df
+            except Exception as e:
+                print(f"Warning: Could not load sheet '{sheet_name}': {e}")
+        
+        return sheets
+    
+    def load_from_bytes(self, file_bytes, filename: str) -> Dict[str, List]:
+        """
+        Load a monthly data file from bytes and extract NIB data.
+        
+        Args:
+            file_bytes: BytesIO object containing the Excel file
+            filename: Original filename for month/year extraction
+            
+        Returns:
+            Dictionary with 'nib' key containing list of NIBData
+        """
+        sheets = self.load_file_from_bytes(file_bytes, filename)
+        result = {}
+        
+        # Check if this is a quarterly file (has multiple months in sheet names)
+        is_quarterly = self._is_quarterly_file(filename, sheets)
+        
+        if is_quarterly:
+            # Return special marker to indicate quarterly file processing needed
+            result['is_quarterly'] = True
+            result['sheets'] = sheets
+            result['year'] = self.extract_year_from_filename(filename)
+            return result
+        
+        # Regular monthly file processing
+        # Possible NIB sheet names (case-insensitive search)
+        nib_sheet_names = ["NIB", "SKALA NIB", "SKALA", "DATA NIB"]
+        
+        # Find and parse NIB sheet
+        for sheet_name, df in sheets.items():
+            sheet_upper = sheet_name.upper().strip()
+            if any(nib_name in sheet_upper for nib_name in nib_sheet_names):
+                result['nib'] = self.parse_nib_sheet(df)
+                break
+        
+        # If no NIB sheet found, try first sheet that has appropriate structure
+        if 'nib' not in result:
+            for sheet_name, df in sheets.items():
+                nib_data = self.parse_nib_sheet(df)
+                if nib_data:  # If we got valid data
+                    result['nib'] = nib_data
+                    break
+        
+        # Extract metadata from filename
+        result['month'] = self.extract_month_from_filename(filename)
+        result['year'] = self.extract_year_from_filename(filename)
+        
+        return result
+    
+    def _is_quarterly_file(self, filename: str, sheets: Dict) -> bool:
+        """Check if file is a quarterly aggregate file with multiple months."""
+        # Check filename for quarterly indicators
+        filename_upper = filename.upper()
+        if "TW " in filename_upper or "TRIWULAN" in filename_upper:
+            return True
+        
+        # Check if sheets have month names (indicating multiple months in one file)
+        months_found = set()
+        month_names = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+                       "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
+        
+        for sheet_name in sheets.keys():
+            sheet_upper = sheet_name.upper()
+            for month in month_names:
+                if month in sheet_upper:
+                    months_found.add(month)
+        
+        # If more than one month found, it's a quarterly file
+        return len(months_found) > 1
+    
+    def _detect_sheet_content_type(self, df: pd.DataFrame) -> str:
+        """
+        Detect content type based on headers.
+        Returns: 'PB', 'SEKTOR_RESIKO', or 'UNKNOWN'
+        """
+        # Scan first few rows for keywords
+        for idx in range(min(20, len(df))):
+            row_str = str(df.iloc[idx].values).upper()
+            if "RESIKO" in row_str or "RISIKO" in row_str or "SEKTOR" in row_str:
+                return 'SEKTOR_RESIKO'
+            if "PMA" in row_str and "PMDN" in row_str:
+                return 'PB'
+        return 'UNKNOWN'
+
+    def load_quarterly_file(self, file_bytes, filename: str) -> Dict[str, Dict]:
+        """
+        Load a quarterly file and return data organized by month.
+        """
+        sheets = self.load_file_from_bytes(file_bytes, filename)
+        year = self.extract_year_from_filename(filename)
+        
+        monthly_data = {}
+        month_names = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+                       "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
+        
+        # Temporary storage to gather all potential data for each month
+        # Structure: {MonthName: {'pb': List[NIBData], 'sr': List[SektorResikoData]}}
+        temp_month_data = {}
+
+        for sheet_name, df in sheets.items():
+            sheet_upper = sheet_name.upper()
+            
+            # Find which month this sheet belongs to
+            found_month = None
+            for month in month_names:
+                if month in sheet_upper:
+                    found_month = month.capitalize()
+                    break
+            
+            if not found_month:
+                continue
+                
+            if found_month not in temp_month_data:
+                temp_month_data[found_month] = {'pb': [], 'sr': []}
+            
+            # Detect content type
+            content_type = self._detect_sheet_content_type(df)
+            
+            # Parse based on content type, regardless of sheet name
+            if content_type == 'SEKTOR_RESIKO':
+                sr_data = self.parse_sektor_resiko_sheet(df)
+                if sr_data:
+                    temp_month_data[found_month]['sr'].extend(sr_data)
+            
+            elif content_type == 'PB':
+                pb_data = self.parse_perizinan_berusaha_sheet(df)
+                if pb_data:
+                    temp_month_data[found_month]['pb'].extend(pb_data)
+            
+            else:
+                # Fallback to name-based detection if content is ambiguous
+                if "RESIKO" in sheet_upper or "RISIKO" in sheet_upper or "SEKTOR" in sheet_upper:
+                    sr_data = self.parse_sektor_resiko_sheet(df)
+                    if sr_data:
+                        temp_month_data[found_month]['sr'].extend(sr_data)
+                elif "PB" in sheet_upper or "PERIZINAN" in sheet_upper or "NIB" in sheet_upper:
+                    pb_data = self.parse_perizinan_berusaha_sheet(df)
+                    if pb_data:
+                        temp_month_data[found_month]['pb'].extend(pb_data)
+
+        # Finalize data for each month
+        for month_name, data in temp_month_data.items():
+            final_nib_data = []
+            
+            # Priority 1: Use PB data (contains PMA/PMDN breakdown)
+            if data['pb']:
+                final_nib_data = data['pb']
+            
+            # Priority 2: Use SR data (Convert to NIBData, contains valid Total)
+            # Only if PB data is missing. 
+            # This handles the case where "Perizinan Berusaha Mei" actually contains Risk data
+            elif data['sr']:
+                print(f"Using Sektor Resiko data as fallback for {month_name}")
+                final_nib_data = [
+                    NIBData(
+                        kabupaten_kota=item.kabupaten_kota,
+                        total=item.total,
+                        # Unfortunately we lose PMA/PMDN distinction here, set to 0
+                        pma=0, pmdn=0,
+                        usaha_mikro=0, usaha_kecil=0, usaha_menengah=0, usaha_besar=0
+                    )
+                    for item in data['sr']
+                ]
+            
+            if final_nib_data:
+                monthly_data[month_name] = {
+                    'month': month_name,
+                    'year': year,
+                    'nib': final_nib_data
+                }
+        
+        return monthly_data
+    
+    def parse_perizinan_berusaha_sheet(self, df: pd.DataFrame) -> List[NIBData]:
+        """
+        Parse a PERIZINAN BERUSAHA sheet from quarterly files.
+        Structure: Kab/Kota, PMA, PMDN, [other cols], JUMLAH (last col)
+        """
+        results = []
+        
+        # Find the data start row
+        data_start_row, kab_col_idx = self._find_data_start_row(df)
+        
+        if data_start_row is None:
+            return results
+        
+        # Offsets relative to Kab: PMA(+1), PMDN(+2)
+        # Total is ALWAYS in the LAST column (varies by sheet)
+        off_pma = 1
+        off_pmdn = 2
+        
+        for idx in range(data_start_row, len(df)):
+            row = df.iloc[idx]
+            
+            # Access Kab/Kota dynamically
+            raw_kab_kota = row.iloc[kab_col_idx] if len(row) > kab_col_idx and pd.notna(row.iloc[kab_col_idx]) else None
+            kab_kota_str = str(raw_kab_kota).strip() if raw_kab_kota is not None else ""
+            
+            is_valid_row = False
+            
+            # Check if it's a valid location or "Null" category with data
+            # IMPORTANT: "Null" is a valid category label, not missing data!
+            null_indicators = ["null", "none", "nan", "-", ""]
+            is_null_loc = kab_kota_str.lower() in null_indicators
+            
+            # Safe access helper
+            def get_val(offset):
+                return self._safe_int(row.iloc[kab_col_idx + offset]) if len(row) > kab_col_idx + offset else 0
+            
+            # Get Total from LAST column (this is the reliable source)
+            total_from_last_col = self._safe_int(row.iloc[-1]) if len(row) > 0 else 0
+            
+            if is_null_loc:
+                # For "Null" labeled rows, include if they have data
+                pma_check = get_val(off_pma)
+                pmdn_check = get_val(off_pmdn)
+                
+                if pma_check + pmdn_check > 0 or total_from_last_col > 0:
+                    kab_kota_str = "Tanpa Lokasi"  # Relabel for display
+                    is_valid_row = True
+            else:
+                # Skip summary/total rows
+                skip_keywords = ["JUMLAH", "TOTAL", "GRAND", "STATUS PM", "KABUPATEN", "NO", "URAIAN"]
+                if any(x in kab_kota_str.upper() for x in skip_keywords):
+                    is_valid_row = False
+                else:
+                    is_valid_row = True
+            
+            if not is_valid_row:
+                continue
+            
+            # Extract values
+            pma = get_val(off_pma)
+            pmdn = get_val(off_pmdn)
+            
+            # Use last column for Total (most reliable)
+            # Only fallback to PMA+PMDN if last column is empty
+            final_total = total_from_last_col if total_from_last_col > 0 else (pma + pmdn)
+            
+            nib_data = NIBData(
+                kabupaten_kota=kab_kota_str,
+                pma=pma,
+                pmdn=pmdn,
+                usaha_mikro=0,
+                usaha_kecil=0,
+                usaha_menengah=0,
+                usaha_besar=0,
+                total=final_total
+            )
+            
+            results.append(nib_data)
+        
+        return results
+    
+    def _merge_nib_data(self, existing: List[NIBData], new: List[NIBData]) -> List[NIBData]:
+        """Merge two lists of NIBData by Kabupaten/Kota."""
+        merged = {d.kabupaten_kota: d for d in existing}
+        
+        for item in new:
+            if item.kabupaten_kota in merged:
+                # Add values
+                old = merged[item.kabupaten_kota]
+                merged[item.kabupaten_kota] = NIBData(
+                    kabupaten_kota=item.kabupaten_kota,
+                    pma=old.pma + item.pma,
+                    pmdn=old.pmdn + item.pmdn,
+                    usaha_mikro=old.usaha_mikro + item.usaha_mikro,
+                    usaha_kecil=old.usaha_kecil + item.usaha_kecil,
+                    usaha_menengah=old.usaha_menengah + item.usaha_menengah,
+                    usaha_besar=old.usaha_besar + item.usaha_besar,
+                    total=old.total + item.total
+                )
+            else:
+                merged[item.kabupaten_kota] = item
+        
+        return list(merged.values())
+    
+    def extract_month_from_filename(self, filename: str) -> Optional[str]:
+        """
+        Extract month name from filename.
+        
+        Examples:
+            "OLAH DATA OSS BULAN JULI 2025.xlsx" -> "Juli"
+            "OLAH DATA OSS BULAN SEPTEMBER 2025.xlsx" -> "September"
+        """
+        months = [
+            "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+            "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
+        ]
+        
+        filename_upper = filename.upper()
+        for month in months:
+            if month in filename_upper:
+                return month.capitalize()
+        
+        return None
+    
+    def extract_year_from_filename(self, filename: str) -> Optional[int]:
+        """Extract year from filename."""
+        match = re.search(r'(\d{4})', filename)
+        if match:
+            return int(match.group(1))
+        return None
+    
+    def parse_nib_sheet(self, df: pd.DataFrame) -> List[NIBData]:
+        """
+        Parse the NIB sheet to extract data per Kabupaten/Kota.
+        """
+        results = []
+        
+        # Find the data start row (after headers) and column index for Kab/Kota
+        data_start_row, kab_col_idx = self._find_data_start_row(df)
+        
+        if data_start_row is None:
+            return results
+        
+        # Determine column offsets assuming standard relative structure
+        # Standard: Kab(0), PMA(1), PMDN(2), UB(3), UK(4), UM(5), UMi(6), Total(7)
+        # Offsets relative to Kab: +1, +2, etc.
+        off_pma = 1
+        off_pmdn = 2
+        off_ub = 3
+        off_uk = 4
+        off_um = 5
+        off_umi = 6
+        off_total = 7
+        
+        # Process each data row
+        for idx in range(data_start_row, len(df)):
+            row = df.iloc[idx]
+            
+            # Handle potential None/NaN values safely
+            raw_kab_kota = row.iloc[kab_col_idx] if len(row) > kab_col_idx and pd.notna(row.iloc[kab_col_idx]) else None
+            kab_kota_str = str(raw_kab_kota).strip() if raw_kab_kota is not None else ""
+            
+            is_valid_row = False
+            kab_kota = kab_kota_str
+            
+            # Check if it's a valid location or "Null"/"Empty" with data
+            null_indicators = ["null", "none", "nan", "-", ""]
+            is_null_loc = kab_kota_str.lower() in null_indicators
+            
+            if is_null_loc:
+                # Calculate sum of components to check if row has data
+                comp_sum = 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_pma]) if len(row) > kab_col_idx + off_pma else 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_pmdn]) if len(row) > kab_col_idx + off_pmdn else 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_ub]) if len(row) > kab_col_idx + off_ub else 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_uk]) if len(row) > kab_col_idx + off_uk else 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_um]) if len(row) > kab_col_idx + off_um else 0
+                comp_sum += self._safe_int(row.iloc[kab_col_idx + off_umi]) if len(row) > kab_col_idx + off_umi else 0
+                
+                # Also check explicit total column
+                explicit_total = self._safe_int(row.iloc[kab_col_idx + off_total]) if len(row) > kab_col_idx + off_total else 0
+                
+                if comp_sum > 0 or explicit_total > 0:
+                    kab_kota = "Tanpa Lokasi"
+                    is_valid_row = True
+            else:
+                # Normal location
+                skip_keywords = ["JUMLAH", "TOTAL", "GRAND", "STATUS PM", "SKALA USAHA", "KABUPATEN", "NO"]
+                if any(x in kab_kota_str.upper() for x in skip_keywords):
+                    is_valid_row = False
+                else:
+                    is_valid_row = True
+            
+            if not is_valid_row:
+                continue
+            
+            # Extract values with safe conversion
+            pma = self._safe_int(row.iloc[kab_col_idx + off_pma]) if len(row) > kab_col_idx + off_pma else 0
+            pmdn = self._safe_int(row.iloc[kab_col_idx + off_pmdn]) if len(row) > kab_col_idx + off_pmdn else 0
+            u_besar = self._safe_int(row.iloc[kab_col_idx + off_ub]) if len(row) > kab_col_idx + off_ub else 0
+            u_kecil = self._safe_int(row.iloc[kab_col_idx + off_uk]) if len(row) > kab_col_idx + off_uk else 0
+            u_menengah = self._safe_int(row.iloc[kab_col_idx + off_um]) if len(row) > kab_col_idx + off_um else 0
+            u_mikro = self._safe_int(row.iloc[kab_col_idx + off_umi]) if len(row) > kab_col_idx + off_umi else 0
+            explicit_total = self._safe_int(row.iloc[kab_col_idx + off_total]) if len(row) > kab_col_idx + off_total else 0
+            
+            final_total = explicit_total if explicit_total > 0 else (pma + pmdn)
+            
+            nib_data = NIBData(
+                kabupaten_kota=kab_kota,
+                pma=pma,
+                pmdn=pmdn,
+                usaha_besar=u_besar,
+                usaha_kecil=u_kecil,
+                usaha_menengah=u_menengah,
+                usaha_mikro=u_mikro,
+                total=final_total
+            )
+            
+            results.append(nib_data)
+        
+        return results
+    
+    def _find_data_start_row(self, df: pd.DataFrame) -> Tuple[Optional[int], int]:
+        """
+        Find the row where actual data starts and the column index of Kabupaten/Kota.
+        Returns (row_idx, col_idx). Returns (None, -1) if not found.
+        """
+        # Strategy 1: Header search (dynamic column)
+        for idx in range(min(50, len(df))):
+            row = df.iloc[idx]
+            # Check col 0 and 1
+            for col_idx in [0, 1]:
+                if col_idx < len(row):
+                    cell = str(row.iloc[col_idx]).upper().strip()
+                    if "KABUPATEN" in cell or "KAB/KOTA" in cell or "KAB. / KOTA" in cell:
+                        return idx + 1, col_idx
+        
+        # Strategy 2: Fallback - First data row
+        for idx in range(len(df)):
+            row = df.iloc[idx]
+            for col_idx in [0, 1]:
+                if col_idx < len(row) and pd.notna(row.iloc[col_idx]):
+                    cell = str(row.iloc[col_idx]).strip()
+                    if (cell.startswith("Kab.") or cell.startswith("Kota") or 
+                        cell.startswith("KAB.") or cell.startswith("KOTA")):
+                        return idx, col_idx
+        return None, -1
+    
+    def _safe_int(self, value) -> int:
+        """Safely convert a value to integer."""
+        if pd.isna(value):
+            return 0
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return 0
+    
+    def load_monthly_data(self, file_path: Path) -> Dict[str, List[NIBData]]:
+        """
+        Load a monthly data file and extract NIB data.
+        
+        Args:
+            file_path: Path to monthly Excel file
+            
+        Returns:
+            Dictionary with 'nib' key containing list of NIBData
+        """
+        sheets = self.load_file(file_path)
+        result = {}
+        
+        # Possible NIB sheet names (case-insensitive search)
+        nib_sheet_names = ["NIB", "SKALA NIB", "SKALA", "DATA NIB"]
+        
+        # Find and parse NIB sheet
+        for sheet_name, df in sheets.items():
+            sheet_upper = sheet_name.upper().strip()
+            if any(nib_name in sheet_upper for nib_name in nib_sheet_names):
+                result['nib'] = self.parse_nib_sheet(df)
+                break
+        
+        # If no NIB sheet found, try first sheet that has appropriate structure
+        if 'nib' not in result:
+            for sheet_name, df in sheets.items():
+                nib_data = self.parse_nib_sheet(df)
+                if nib_data:  # If we got valid data
+                    result['nib'] = nib_data
+                    break
+        
+        # Extract metadata
+        filename = Path(file_path).name
+        result['month'] = self.extract_month_from_filename(filename)
+        result['year'] = self.extract_year_from_filename(filename)
+        
+        return result
+    
+    def load_quarterly_data(self, file_path: Path) -> Dict[str, Dict[str, List[NIBData]]]:
+        """
+        Load a quarterly aggregate file containing multiple months.
+        
+        These files have separate sheets for each month like:
+        - "PERIZINAN BERUSAHA JANUARI"
+        - "SEKTOR & RESIKO JANUARI"
+        - etc.
+        
+        Args:
+            file_path: Path to quarterly Excel file
+            
+        Returns:
+            Dictionary mapping month names to their data
+        """
+        sheets = self.load_file(file_path)
+        result = {}
+        
+        # Group sheets by month
+        months_found = set()
+        for sheet_name in sheets.keys():
+            for pattern in self.MONTHLY_SHEET_PATTERNS:
+                match = re.search(pattern, sheet_name, re.IGNORECASE)
+                if match:
+                    month = match.group(1).capitalize()
+                    months_found.add(month)
+        
+        # For each month found, try to find and parse the NIB data
+        # Note: Quarterly files might have different structure
+        # This is a simplified implementation
+        
+        result['year'] = self.extract_year_from_filename(Path(file_path).name)
+        result['months'] = list(months_found)
+        result['sheets'] = sheets
+        
+        return result
+    
+    def get_nib_dataframe(self, nib_data_list: List[NIBData]) -> pd.DataFrame:
+        """
+        Convert list of NIBData to a pandas DataFrame.
+        
+        Args:
+            nib_data_list: List of NIBData objects
+            
+        Returns:
+            DataFrame with NIB data
+        """
+        if not nib_data_list:
+            return pd.DataFrame()
+        
+        data = []
+        for nib in nib_data_list:
+            data.append({
+                'Kabupaten/Kota': nib.kabupaten_kota,
+                'PMA': nib.pma,
+                'PMDN': nib.pmdn,
+                'Usaha Mikro': nib.usaha_mikro,
+                'Usaha Kecil': nib.usaha_kecil,
+                'Usaha Menengah': nib.usaha_menengah,
+                'Usaha Besar': nib.usaha_besar,
+                'UMK': nib.umk,
+                'NON-UMK': nib.non_umk,
+                'Total': nib.total,
+            })
+        
+        return pd.DataFrame(data)
+    
+    def parse_sektor_resiko_sheet(self, df: pd.DataFrame) -> List[SektorResikoData]:
+        """
+        Parse the SEKTOR RESIKO sheet.
+        """
+        results = []
+        data_start_row, kab_col_idx = self._find_data_start_row(df)
+        
+        if data_start_row is None:
+            return results
+        
+        # Standard Sektor Resiko Offsets relative to Kab column
+        # Based on: Kab(0), MR(1), MT(2), R(3), T(4), Eng(5)... Total(13)
+        # So offsets: +1, +2, ... +13
+        
+        for idx in range(data_start_row, len(df)):
+            row = df.iloc[idx]
+            
+            raw_kab_kota = row.iloc[kab_col_idx] if len(row) > kab_col_idx and pd.notna(row.iloc[kab_col_idx]) else None
+            kab_kota_str = str(raw_kab_kota).strip() if raw_kab_kota is not None else ""
+            
+            is_valid_row = False
+            kab_kota = kab_kota_str
+            
+            null_indicators = ["null", "none", "nan", "-", ""]
+            is_null_loc = kab_kota_str.lower() in null_indicators
+            
+            # Safe row access Helper
+            def get_val(offset):
+                return self._safe_int(row.iloc[kab_col_idx + offset]) if len(row) > kab_col_idx + offset else 0
+            
+            if is_null_loc:
+                # Check for total data (last column ~offset 13) or components
+                # Check first few risk columns (offsets 1-4)
+                risk_sum = get_val(1) + get_val(2) + get_val(3) + get_val(4)
+                total_val = get_val(13)
+                
+                if total_val > 0 or risk_sum > 0:
+                    kab_kota = "Tanpa Lokasi"
+                    is_valid_row = True
+            else:
+                skip_keywords = ["JUMLAH", "TOTAL", "GRAND", "RISIKO", "SEKTOR", "NO"]
+                if any(x in kab_kota_str.upper() for x in skip_keywords):
+                    is_valid_row = False
+                else:
+                    is_valid_row = True
+            
+            if not is_valid_row:
+                continue
+            
+            # Using offsets
+            sektor_data = SektorResikoData(
+                kabupaten_kota=str(kab_kota).strip(),
+                risiko_menengah_rendah=get_val(1),
+                risiko_menengah_tinggi=get_val(2),
+                risiko_rendah=get_val(3),
+                risiko_tinggi=get_val(4),
+                sektor_energi=get_val(5),
+                sektor_kelautan=get_val(6),
+                sektor_kesehatan=get_val(7),
+                sektor_komunikasi=get_val(8),
+                sektor_pariwisata=get_val(9),
+                sektor_perhubungan=get_val(10),
+                sektor_perindustrian=get_val(11),
+                sektor_pertanian=get_val(12),
+                total=get_val(13),
+            )
+            
+            results.append(sektor_data)
+        
+        return results
+    
+    def get_sektor_resiko_dataframe(self, sektor_data_list: List[SektorResikoData]) -> pd.DataFrame:
+        """
+        Convert list of SektorResikoData to a pandas DataFrame.
+        
+        Args:
+            sektor_data_list: List of SektorResikoData objects
+            
+        Returns:
+            DataFrame with risk-based permit data
+        """
+        if not sektor_data_list:
+            return pd.DataFrame()
+        
+        data = []
+        for item in sektor_data_list:
+            data.append({
+                'Kabupaten/Kota': item.kabupaten_kota,
+                'Risiko Rendah': item.risiko_rendah,
+                'Risiko Menengah Rendah': item.risiko_menengah_rendah,
+                'Risiko Menengah Tinggi': item.risiko_menengah_tinggi,
+                'Risiko Tinggi': item.risiko_tinggi,
+                'Energi': item.sektor_energi,
+                'Kelautan': item.sektor_kelautan,
+                'Kesehatan': item.sektor_kesehatan,
+                'Komunikasi': item.sektor_komunikasi,
+                'Pariwisata': item.sektor_pariwisata,
+                'Perhubungan': item.sektor_perhubungan,
+                'Perindustrian': item.sektor_perindustrian,
+                'Pertanian': item.sektor_pertanian,
+                'Total': item.total,
+            })
+        
+        return pd.DataFrame(data)
+
+
+# Convenience function
+def load_excel_file(file_path: str | Path) -> Dict:
+    """
+    Convenience function to load an Excel file.
+    
+    Args:
+        file_path: Path to Excel file
+        
+    Returns:
+        Parsed data dictionary
+    """
+    loader = DataLoader()
+    return loader.load_monthly_data(Path(file_path))
