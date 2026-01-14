@@ -637,6 +637,10 @@ def init_session_state():
         st.session_state.report = None
     if 'stats' not in st.session_state:
         st.session_state.stats = None
+    if 'investment_reports' not in st.session_state:
+        st.session_state.investment_reports = None  # Dict[str, InvestmentReport]
+    if 'investment_file' not in st.session_state:
+        st.session_state.investment_file = None
 
 
 def df_to_html_table(df: pd.DataFrame, max_rows: int = 15) -> str:
@@ -720,6 +724,19 @@ def render_sidebar():
                 for f in st.session_state.loaded_files:
                     st.text(f"• {f.name}")
         
+        # Investment file uploader
+        st.subheader("📊 Data Investasi")
+        investment_file = st.file_uploader(
+            "Upload file REALISASI INVESTASI",
+            type=['xlsx', 'xls'],
+            help="Upload file REALISASI INVESTASI TAHUN *.xlsx",
+            key="investment_uploader"
+        )
+        
+        if investment_file:
+            st.session_state.investment_file = investment_file
+            st.success(f"✅ {investment_file.name}")
+        
         st.divider()
         
         # Period selection
@@ -768,6 +785,8 @@ def render_sidebar():
             st.session_state.report = None
             st.session_state.stats = None
             st.session_state.aggregator = DataAggregator()
+            st.session_state.investment_reports = None
+            st.session_state.investment_file = None
             st.rerun()
         
         return jenis_periode, periode, tahun
@@ -856,6 +875,17 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
             'total': sum(d.total for d in all_sektor_risiko),
         }
         stats['sektor_risiko'] = sektor_totals
+    
+    # Process investment file if available
+    if st.session_state.investment_file:
+        try:
+            inv_file = st.session_state.investment_file
+            inv_content = io.BytesIO(inv_file.getvalue())
+            investment_reports = loader.load_realisasi_investasi(inv_content, inv_file.name)
+            st.session_state.investment_reports = investment_reports
+        except Exception as e:
+            print(f"Error loading investment data: {e}")
+            st.session_state.investment_reports = None
     
     st.session_state.report = report
     st.session_state.stats = stats
@@ -1152,7 +1182,106 @@ def render_report(report, stats: dict):
         st.markdown(f'<div class="narrative-box">{sektor_narrative}</div>', 
                     unsafe_allow_html=True)
     
-    # Section 7: Kesimpulan
+    # Section: Realisasi Investasi (if data available)
+    investment_reports = st.session_state.get('investment_reports', None)
+    if investment_reports:
+        st.markdown('<div class="section-title">2. Realisasi Investasi</div>', 
+                    unsafe_allow_html=True)
+        
+        # Get current period's investment data
+        periode_name = report.period_name  # e.g., "TW I", "TW II"
+        current_investment = investment_reports.get(periode_name)
+        
+        if current_investment:
+            # Metrics for investment
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">Rp {current_investment.total_investasi/1e9:,.1f} M</div>
+                    <div class="metric-label">Total Investasi</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">Rp {current_investment.pma_total/1e9:,.1f} M</div>
+                    <div class="metric-label">PMA (Asing)</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">Rp {current_investment.pmdn_total/1e9:,.1f} M</div>
+                    <div class="metric-label">PMDN (Domestik)</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{current_investment.total_proyek:,}</div>
+                    <div class="metric-label">Total Proyek</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            st.markdown('<div class="section-title">2.1 Investasi per Wilayah</div>', 
+                        unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Investment by wilayah chart (PMA)
+                if current_investment.pma_by_wilayah:
+                    fig_inv_wil = chart_gen.create_investment_by_wilayah_chart(
+                        current_investment.pma_by_wilayah,
+                        title="Investasi PMA per Wilayah"
+                    )
+                    st.plotly_chart(fig_inv_wil, use_container_width=True)
+            
+            with col2:
+                # PMDN by wilayah
+                if current_investment.pmdn_by_wilayah:
+                    fig_inv_wil_pmdn = chart_gen.create_investment_by_wilayah_chart(
+                        current_investment.pmdn_by_wilayah,
+                        title="Investasi PMDN per Wilayah"
+                    )
+                    st.plotly_chart(fig_inv_wil_pmdn, use_container_width=True)
+            
+            st.markdown('<div class="section-title">2.2 Perbandingan PMA vs PMDN</div>', 
+                        unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # PMA vs PMDN donut
+                fig_pma_pmdn = chart_gen.create_pma_pmdn_comparison_chart(
+                    current_investment.pma_total,
+                    current_investment.pmdn_total
+                )
+                st.plotly_chart(fig_pma_pmdn, use_container_width=True)
+            
+            with col2:
+                # Labor absorption
+                fig_labor = chart_gen.create_labor_absorption_chart(
+                    current_investment.total_tki,
+                    current_investment.total_tka
+                )
+                st.plotly_chart(fig_labor, use_container_width=True)
+            
+            # TW Comparison chart (if multiple TW data available)
+            if len(investment_reports) > 1:
+                st.markdown('<div class="section-title">2.3 Perbandingan Antar Triwulan</div>', 
+                            unsafe_allow_html=True)
+                fig_tw_comp = chart_gen.create_investment_tw_comparison_chart(investment_reports)
+                st.plotly_chart(fig_tw_comp, use_container_width=True)
+        else:
+            st.info(f"Data investasi untuk {periode_name} tidak tersedia dalam file yang diupload.")
+    
+    # Section: Kesimpulan
     st.markdown('<div class="section-title">Kesimpulan</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="narrative-box">{narratives.kesimpulan}</div>', 
                 unsafe_allow_html=True)

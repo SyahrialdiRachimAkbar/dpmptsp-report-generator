@@ -61,6 +61,76 @@ class SektorResikoData:
         return self.risiko_rendah + self.risiko_menengah_rendah + self.risiko_menengah_tinggi + self.risiko_tinggi
 
 
+@dataclass
+class InvestmentData:
+    """Data structure for investment realization data per Wilayah/Sektor"""
+    name: str  # Wilayah or Sektor name
+    jumlah_rp: float = 0  # Investment value in Rupiah
+    proyek: int = 0  # Number of projects
+    tki: int = 0  # Tenaga Kerja Indonesia (local workers)
+    tka: int = 0  # Tenaga Kerja Asing (foreign workers)
+    
+    @property
+    def total_tenaga_kerja(self) -> int:
+        """Total labor absorption"""
+        return self.tki + self.tka
+
+
+@dataclass
+class InvestmentReport:
+    """Investment realization report for a specific period (Triwulan)"""
+    triwulan: str  # e.g., "TW I", "TW II"
+    year: int
+    # PMA data
+    pma_total: float = 0  # Total PMA value in Rupiah
+    pma_by_wilayah: list = None  # List[InvestmentData]
+    pma_by_sektor: list = None  # List[InvestmentData]
+    pma_proyek: int = 0
+    pma_tki: int = 0
+    pma_tka: int = 0
+    # PMDN data
+    pmdn_total: float = 0  # Total PMDN value in Rupiah
+    pmdn_by_wilayah: list = None  # List[InvestmentData]
+    pmdn_by_sektor: list = None  # List[InvestmentData]
+    pmdn_proyek: int = 0
+    pmdn_tki: int = 0
+    pmdn_tka: int = 0
+    # By country (for PMA)
+    by_country: list = None  # List[InvestmentData]
+    
+    def __post_init__(self):
+        if self.pma_by_wilayah is None:
+            self.pma_by_wilayah = []
+        if self.pma_by_sektor is None:
+            self.pma_by_sektor = []
+        if self.pmdn_by_wilayah is None:
+            self.pmdn_by_wilayah = []
+        if self.pmdn_by_sektor is None:
+            self.pmdn_by_sektor = []
+        if self.by_country is None:
+            self.by_country = []
+    
+    @property
+    def total_investasi(self) -> float:
+        """Total investment (PMA + PMDN) in Rupiah"""
+        return self.pma_total + self.pmdn_total
+    
+    @property
+    def total_proyek(self) -> int:
+        """Total project count"""
+        return self.pma_proyek + self.pmdn_proyek
+    
+    @property
+    def total_tki(self) -> int:
+        """Total local workers"""
+        return self.pma_tki + self.pmdn_tki
+    
+    @property
+    def total_tka(self) -> int:
+        """Total foreign workers"""
+        return self.pma_tka + self.pmdn_tka
+
+
 class DataLoader:
     """
     Loader for DPMPTSP Excel data files.
@@ -781,6 +851,189 @@ class DataLoader:
             })
         
         return pd.DataFrame(data)
+    
+    def load_realisasi_investasi(self, file_bytes, filename: str = "") -> Dict[str, InvestmentReport]:
+        """
+        Load REALISASI INVESTASI file and parse investment data by Triwulan.
+        
+        The file contains sheets like:
+        - REALISASI INVESTASI 2025: Summary per TW
+        - PMA SEKTOR TW I: PMA by sector for TW I
+        - PMA WILAYAH TW I: PMA by region for TW I
+        - PMDN SEKTOR TW I: PMDN by sector for TW I
+        - PMDN WILAYAH TW I: PMDN by region for TW I
+        
+        Returns:
+            Dictionary mapping Triwulan name to InvestmentReport
+        """
+        sheets = self.load_file_from_bytes(file_bytes, filename)
+        year = self.extract_year_from_filename(filename) or 2025
+        
+        # Initialize reports for each Triwulan
+        reports = {}
+        triwulan_list = ["TW I", "TW II", "TW III", "TW IV"]
+        
+        for tw in triwulan_list:
+            reports[tw] = InvestmentReport(triwulan=tw, year=year)
+        
+        # Parse each sheet
+        for sheet_name, df in sheets.items():
+            sheet_upper = sheet_name.upper()
+            
+            # Determine which Triwulan this sheet belongs to
+            # Use regex to match exact triwulan (avoid TW I matching TW II, TW III, TW IV)
+            tw = None
+            # Check TW IV first (most specific), then TW III, TW II, TW I
+            for t in ["TW IV", "TW III", "TW II", "TW I"]:
+                # Pattern variations: "TW I", "TWI", "TW1"
+                tw_clean = t.replace(" ", "")  # TWI, TWII, TWIII, TWIV
+                tw_roman = t  # TW I, TW II, TW III, TW IV
+                
+                if tw_clean in sheet_upper.replace(" ", ""):
+                    tw = t
+                    break
+                if tw_roman in sheet_upper:
+                    tw = t
+                    break
+            
+            if tw is None:
+                continue
+            
+            # Determine sheet type and parse
+            if "PMA" in sheet_upper and "SEKTOR" in sheet_upper:
+                reports[tw].pma_by_sektor = self._parse_investment_sheet(df)
+                reports[tw].pma_total = sum(d.jumlah_rp for d in reports[tw].pma_by_sektor)
+                reports[tw].pma_proyek = sum(d.proyek for d in reports[tw].pma_by_sektor)
+                reports[tw].pma_tki = sum(d.tki for d in reports[tw].pma_by_sektor)
+                reports[tw].pma_tka = sum(d.tka for d in reports[tw].pma_by_sektor)
+                
+            elif "PMA" in sheet_upper and "WILAYAH" in sheet_upper:
+                reports[tw].pma_by_wilayah = self._parse_investment_sheet(df)
+                # If totals not set from sektor sheet, use wilayah data
+                if reports[tw].pma_total == 0:
+                    reports[tw].pma_total = sum(d.jumlah_rp for d in reports[tw].pma_by_wilayah)
+                    reports[tw].pma_proyek = sum(d.proyek for d in reports[tw].pma_by_wilayah)
+                    reports[tw].pma_tki = sum(d.tki for d in reports[tw].pma_by_wilayah)
+                    reports[tw].pma_tka = sum(d.tka for d in reports[tw].pma_by_wilayah)
+                    
+            elif "PMDN" in sheet_upper and "SEKTOR" in sheet_upper:
+                reports[tw].pmdn_by_sektor = self._parse_investment_sheet(df)
+                reports[tw].pmdn_total = sum(d.jumlah_rp for d in reports[tw].pmdn_by_sektor)
+                reports[tw].pmdn_proyek = sum(d.proyek for d in reports[tw].pmdn_by_sektor)
+                reports[tw].pmdn_tki = sum(d.tki for d in reports[tw].pmdn_by_sektor)
+                reports[tw].pmdn_tka = sum(d.tka for d in reports[tw].pmdn_by_sektor)
+                
+            elif "PMDN" in sheet_upper and "WILAYAH" in sheet_upper:
+                reports[tw].pmdn_by_wilayah = self._parse_investment_sheet(df)
+                if reports[tw].pmdn_total == 0:
+                    reports[tw].pmdn_total = sum(d.jumlah_rp for d in reports[tw].pmdn_by_wilayah)
+                    reports[tw].pmdn_proyek = sum(d.proyek for d in reports[tw].pmdn_by_wilayah)
+                    reports[tw].pmdn_tki = sum(d.tki for d in reports[tw].pmdn_by_wilayah)
+                    reports[tw].pmdn_tka = sum(d.tka for d in reports[tw].pmdn_by_wilayah)
+                    
+            elif "NEGARA" in sheet_upper:
+                reports[tw].by_country = self._parse_investment_sheet(df)
+        
+        # Filter out empty reports
+        reports = {tw: r for tw, r in reports.items() 
+                   if r.pma_total > 0 or r.pmdn_total > 0 or r.pma_by_wilayah or r.pmdn_by_wilayah}
+        
+        return reports
+    
+    def _parse_investment_sheet(self, df: pd.DataFrame) -> List[InvestmentData]:
+        """
+        Parse an investment sheet (PMA/PMDN by wilayah or sektor).
+        
+        Standard structure:
+        NO | WILAYAH/SEKTOR | JUMLAH | PROYEK | TKI | TKA
+                            (Rp.)
+        """
+        results = []
+        
+        # Find header row with WILAYAH/SEKTOR as anchor
+        # Must also have NO in the same row to distinguish from title
+        header_row = None
+        name_col = None
+        
+        for idx in range(min(20, len(df))):
+            row = df.iloc[idx]
+            row_str = ' '.join(str(v).upper() for v in row)
+            
+            # Look for row that has both "NO" and "WILAYAH" or "SEKTOR" - this is the true header
+            has_no = any(str(v).upper().strip() == "NO" for v in row)
+            has_wilayah_or_sektor = any("WILAYAH" in str(v).upper() or "SEKTOR" in str(v).upper() for v in row)
+            
+            if has_no and has_wilayah_or_sektor:
+                header_row = idx
+                # Find the column with WILAYAH or SEKTOR
+                for col_idx, val in enumerate(row):
+                    val_str = str(val).upper().strip()
+                    if "WILAYAH" in val_str or "SEKTOR" in val_str:
+                        name_col = col_idx
+                        break
+                break
+        
+        if header_row is None or name_col is None:
+            return results
+        
+        # Determine column positions based on the same row as header
+        # Structure: NO(0), WILAYAH(1), JUMLAH(2), PROYEK(3), TKI(4), TKA(5)
+        # name_col is WILAYAH position, so:
+        jumlah_col = name_col + 1  # JUMLAH is right after WILAYAH
+        proyek_col = name_col + 2  # PROYEK is next
+        tki_col = name_col + 3     # TKI
+        tka_col = name_col + 4     # TKA
+        
+        # Skip to data rows (header row + 2 to skip the subheader with "(Rp.)")
+        data_start = header_row + 2
+        
+        # Parse data rows
+        for idx in range(data_start, len(df)):
+            row = df.iloc[idx]
+            
+            # Get name
+            raw_name = row.iloc[name_col] if name_col is not None and len(row) > name_col else None
+            if pd.isna(raw_name):
+                continue
+            name = str(raw_name).strip()
+            
+            # Skip summary rows
+            skip_keywords = ["JUMLAH", "TOTAL", "GRAND", "NO"]
+            if any(x in name.upper() for x in skip_keywords) or not name:
+                continue
+            
+            # Get values
+            def safe_float(val):
+                if pd.isna(val):
+                    return 0.0
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            def safe_int(val):
+                if pd.isna(val):
+                    return 0
+                try:
+                    return int(float(val))
+                except (ValueError, TypeError):
+                    return 0
+            
+            jumlah = safe_float(row.iloc[jumlah_col]) if jumlah_col is not None and len(row) > jumlah_col else 0.0
+            proyek = safe_int(row.iloc[proyek_col]) if proyek_col is not None and len(row) > proyek_col else 0
+            tki = safe_int(row.iloc[tki_col]) if tki_col is not None and len(row) > tki_col else 0
+            tka = safe_int(row.iloc[tka_col]) if tka_col is not None and len(row) > tka_col else 0
+            
+            if jumlah > 0 or proyek > 0:
+                results.append(InvestmentData(
+                    name=name,
+                    jumlah_rp=jumlah,
+                    proyek=proyek,
+                    tki=tki,
+                    tka=tka
+                ))
+        
+        return results
 
 
 # Convenience function

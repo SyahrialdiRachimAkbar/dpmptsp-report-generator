@@ -60,6 +60,16 @@ class ChartGenerator:
             'margin': {'l': 50, 'r': 50, 't': 60, 'b': 50},
         }
     
+    def _get_gradient_colors(self, n: int) -> List[str]:
+        """Generate n colors from the gradient palette."""
+        if n <= 0:
+            return []
+        if n >= len(self.GRADIENT):
+            return self.GRADIENT[:n]
+        # Sample evenly from gradient
+        step = len(self.GRADIENT) / n
+        return [self.GRADIENT[int(i * step)] for i in range(n)]
+    
     def create_monthly_bar_with_trendline(
         self,
         data: Dict[str, int],
@@ -650,6 +660,232 @@ class ChartGenerator:
             legend={'x': 0.85, 'y': 0.5},
             **self.layout_defaults
         )
+        
+        return fig
+    
+    def create_investment_by_wilayah_chart(
+        self,
+        data: List,  # List[InvestmentData]
+        title: str = "Realisasi Investasi per Wilayah",
+        top_n: int = 10
+    ) -> go.Figure:
+        """
+        Create horizontal bar chart showing investment by wilayah.
+        
+        Args:
+            data: List of InvestmentData objects
+            title: Chart title
+            top_n: Number of top regions to show
+            
+        Returns:
+            Plotly Figure object
+        """
+        # Sort by value and take top N
+        sorted_data = sorted(data, key=lambda x: x.jumlah_rp, reverse=True)[:top_n]
+        
+        # Prepare data (reverse for correct display order)
+        names = [d.name for d in sorted_data][::-1]
+        values = [d.jumlah_rp / 1e9 for d in sorted_data][::-1]  # Convert to Billions
+        
+        # Create gradient colors
+        n_bars = len(names)
+        colors = self._get_gradient_colors(n_bars)
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=values,
+            y=names,
+            orientation='h',
+            marker_color=colors,
+            text=[f'Rp {v:,.1f}M' for v in values],
+            textposition='outside',
+            textfont={'size': 10, 'color': '#e8eaed'},
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            xaxis_title='Nilai Investasi (Miliar Rupiah)',
+            width=self.width,
+            height=max(350, len(names) * 40),
+            **self.layout_defaults
+        )
+        
+        fig.update_xaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            title_font={'color': '#e8eaed'},
+            tickfont={'color': '#e8eaed'}
+        )
+        fig.update_yaxes(tickfont={'color': '#e8eaed'})
+        
+        return fig
+    
+    def create_pma_pmdn_comparison_chart(
+        self,
+        pma_total: float,
+        pmdn_total: float,
+        title: str = "Perbandingan Investasi PMA vs PMDN"
+    ) -> go.Figure:
+        """
+        Create a grouped bar or pie chart comparing PMA and PMDN investments.
+        
+        Args:
+            pma_total: Total PMA investment in Rupiah
+            pmdn_total: Total PMDN investment in Rupiah
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        total = pma_total + pmdn_total
+        pma_pct = (pma_total / total * 100) if total > 0 else 0
+        pmdn_pct = (pmdn_total / total * 100) if total > 0 else 0
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Pie(
+            labels=['PMA', 'PMDN'],
+            values=[pma_total, pmdn_total],
+            hole=0.6,
+            marker_colors=[self.COLORS['pma'], self.COLORS['pmdn']],
+            textinfo='label+percent',
+            textposition='outside',
+            textfont={'size': 12, 'color': '#e8eaed'},
+            hovertemplate='%{label}: Rp %{value:,.0f}<extra></extra>'
+        ))
+        
+        # Add center annotation
+        fig.add_annotation(
+            x=0.5, y=0.5,
+            text=f"<b>Total</b><br>Rp {total/1e12:.2f}T",
+            showarrow=False,
+            font={'size': 14, 'color': '#e8eaed'}
+        )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            width=self.width,
+            height=self.height,
+            showlegend=True,
+            legend={'x': 0.85, 'y': 0.5},
+            **self.layout_defaults
+        )
+        
+        return fig
+    
+    def create_investment_tw_comparison_chart(
+        self,
+        tw_data: Dict,  # Dict[str, InvestmentReport]
+        title: str = "Perbandingan Investasi per Triwulan"
+    ) -> go.Figure:
+        """
+        Create a grouped bar chart comparing investment across Triwulans.
+        
+        Args:
+            tw_data: Dictionary mapping TW name to InvestmentReport
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        tw_names = []
+        pma_values = []
+        pmdn_values = []
+        
+        # Sort by TW order
+        for tw in ["TW I", "TW II", "TW III", "TW IV"]:
+            if tw in tw_data:
+                report = tw_data[tw]
+                tw_names.append(tw)
+                pma_values.append(report.pma_total / 1e9)  # Convert to Billions
+                pmdn_values.append(report.pmdn_total / 1e9)
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            name='PMA',
+            x=tw_names,
+            y=pma_values,
+            marker_color=self.COLORS['pma'],
+            text=[f'{v:,.0f}M' for v in pma_values],
+            textposition='outside',
+            textfont={'size': 10, 'color': '#e8eaed'},
+        ))
+        
+        fig.add_trace(go.Bar(
+            name='PMDN',
+            x=tw_names,
+            y=pmdn_values,
+            marker_color=self.COLORS['pmdn'],
+            text=[f'{v:,.0f}M' for v in pmdn_values],
+            textposition='outside',
+            textfont={'size': 10, 'color': '#e8eaed'},
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            xaxis_title='Triwulan',
+            yaxis_title='Nilai Investasi (Miliar Rupiah)',
+            barmode='group',
+            width=self.width,
+            height=self.height,
+            **self.layout_defaults
+        )
+        
+        fig.update_xaxes(
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        fig.update_yaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        
+        return fig
+    
+    def create_labor_absorption_chart(
+        self,
+        tki: int,
+        tka: int,
+        title: str = "Penyerapan Tenaga Kerja"
+    ) -> go.Figure:
+        """
+        Create a chart showing labor absorption (TKI vs TKA).
+        
+        Args:
+            tki: Total domestic workers
+            tka: Total foreign workers
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=['TKI (Indonesia)', 'TKA (Asing)'],
+            y=[tki, tka],
+            marker_color=[self.COLORS['accent'], self.COLORS['warning']],
+            text=[f'{tki:,}', f'{tka:,}'],
+            textposition='outside',
+            textfont={'size': 12, 'color': '#e8eaed'},
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            yaxis_title='Jumlah Tenaga Kerja',
+            width=self.width,
+            height=400,
+            **self.layout_defaults
+        )
+        
+        fig.update_yaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
         
         return fig
 
