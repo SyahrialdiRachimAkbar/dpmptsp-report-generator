@@ -33,10 +33,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS - Modern UI/UX Design
+# Custom CSS - Modern UI/UX Design with Dark Theme Support
 st.markdown("""
 <style>
-    /* ===== ROOT VARIABLES ===== */
+    /* ===== ROOT VARIABLES - LIGHT MODE ===== */
     :root {
         --primary-color: #1e3a5f;
         --primary-light: #2d5a87;
@@ -45,7 +45,10 @@ st.markdown("""
         --warning-color: #f0ad4e;
         --danger-color: #d9534f;
         --background-light: #f0f4f8;
+        --background-gradient-start: #f0f4f8;
+        --background-gradient-end: #e8eef3;
         --card-bg: rgba(255, 255, 255, 0.95);
+        --card-border: rgba(255, 255, 255, 0.8);
         --text-primary: #2c3e50;
         --text-secondary: #6c757d;
         --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
@@ -54,11 +57,150 @@ st.markdown("""
         --gradient-accent: linear-gradient(135deg, #5cb85c 0%, #3d9e52 100%);
         --border-radius: 12px;
         --transition: all 0.3s ease;
+        --divider-gradient: linear-gradient(90deg, transparent, var(--secondary-color), transparent);
+        --narrative-border: var(--primary-color);
+        --table-header-bg: #f8f9fa;
+        --table-row-hover: #f1f3f4;
+        --input-bg: #ffffff;
+        --input-border: #dee2e6;
+    }
+    
+    /* ===== DARK MODE VARIABLES ===== */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --primary-color: #4da6d9;
+            --primary-light: #6bb8e6;
+            --secondary-color: #5cbddb;
+            --accent-color: #6fcf6f;
+            --warning-color: #ffcc66;
+            --danger-color: #ff6b6b;
+            --background-light: #1a1d23;
+            --background-gradient-start: #1a1d23;
+            --background-gradient-end: #12151a;
+            --card-bg: rgba(30, 35, 45, 0.95);
+            --card-border: rgba(60, 70, 90, 0.6);
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a8;
+            --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.35);
+            --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5);
+            --gradient-primary: linear-gradient(135deg, #2d5a87 0%, #4da6d9 100%);
+            --gradient-accent: linear-gradient(135deg, #4caf50 0%, #6fcf6f 100%);
+            --divider-gradient: linear-gradient(90deg, transparent, var(--secondary-color), transparent);
+            --narrative-border: var(--secondary-color);
+            --table-header-bg: #252a33;
+            --table-row-hover: #2d323d;
+            --input-bg: #252a33;
+            --input-border: #3d4450;
+        }
     }
     
     /* ===== GLOBAL STYLES ===== */
     .stApp {
-        background: linear-gradient(180deg, #f0f4f8 0%, #e8eef3 100%);
+        background: linear-gradient(180deg, var(--background-gradient-start) 0%, var(--background-gradient-end) 100%);
+    }
+    
+    /* Dark mode main content area */
+    @media (prefers-color-scheme: dark) {
+        .stApp {
+            color: var(--text-primary);
+        }
+        
+        .stApp [data-testid="stAppViewContainer"] {
+            background: linear-gradient(180deg, var(--background-gradient-start) 0%, var(--background-gradient-end) 100%);
+        }
+        
+        /* Streamlit native elements text color */
+        .stApp p, .stApp span, .stApp label, .stApp div {
+            color: var(--text-primary);
+        }
+        
+        /* Info/Warning/Success boxes */
+        .stAlert {
+            background: var(--card-bg) !important;
+            border: 1px solid var(--card-border) !important;
+        }
+        
+        .stAlert p {
+            color: var(--text-primary) !important;
+        }
+        
+        /* DataFrames / Tables */
+        [data-testid="stDataFrame"] {
+            background: var(--card-bg);
+        }
+        
+        [data-testid="stDataFrame"] th {
+            background: var(--table-header-bg) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        [data-testid="stDataFrame"] td {
+            background: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        [data-testid="stDataFrame"] tr:hover td {
+            background: var(--table-row-hover) !important;
+        }
+        
+        /* Streamlit DataFrame with glide-data-grid */
+        [data-testid="stDataFrameResizable"],
+        [data-testid="stDataFrame"] > div,
+        .dvn-scroller,
+        .dvn-underlay,
+        .dvn-scroll-inner {
+            background: var(--card-bg) !important;
+        }
+        
+        /* Glide Data Editor (Streamlit's table component) */
+        .glideDataEditor,
+        .gdg-style {
+            background: var(--card-bg) !important;
+        }
+        
+        canvas + div {
+            background: var(--card-bg) !important; 
+        }
+        
+        /* Expander */
+        .streamlit-expanderHeader {
+            background: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .streamlit-expanderContent {
+            background: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+        }
+        
+        /* Select boxes and inputs */
+        .stSelectbox > div > div,
+        .stMultiSelect > div > div,
+        .stTextInput > div > div > input {
+            background: var(--input-bg) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--input-border) !important;
+        }
+        
+        /* Radio buttons and checkboxes */
+        .stRadio label, .stCheckbox label {
+            color: var(--text-primary) !important;
+        }
+        
+        /* Plotly charts - transparent background */
+        .js-plotly-plot .plotly .main-svg {
+            background: transparent !important;
+        }
+        
+        /* Legend text in Plotly */
+        .js-plotly-plot .plotly .legend text {
+            fill: var(--text-primary) !important;
+        }
+        
+        /* Chart annotations */
+        .js-plotly-plot .annotation-text {
+            fill: var(--text-primary) !important;
+        }
     }
     
     /* ===== SIDEBAR IMPROVEMENTS ===== */
@@ -119,6 +261,16 @@ st.markdown("""
         font-weight: 400;
     }
     
+    /* Dark mode header override */
+    @media (prefers-color-scheme: dark) {
+        .main-header {
+            background: linear-gradient(135deg, #6bb8e6 0%, #4da6d9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    }
+    
     /* ===== METRIC CARDS - GLASSMORPHISM ===== */
     .metric-card {
         background: var(--card-bg);
@@ -126,7 +278,7 @@ st.markdown("""
         border-radius: var(--border-radius);
         padding: 1.5rem;
         box-shadow: var(--shadow-soft);
-        border: 1px solid rgba(255, 255, 255, 0.8);
+        border: 1px solid var(--card-border);
         transition: var(--transition);
         position: relative;
         overflow: hidden;
@@ -158,7 +310,7 @@ st.markdown("""
         border-radius: var(--border-radius);
         padding: 1.5rem;
         box-shadow: var(--shadow-soft);
-        border: 1px solid rgba(255, 255, 255, 0.8);
+        border: 1px solid var(--card-border);
         text-align: center;
         transition: var(--transition);
         height: 100%;
@@ -197,12 +349,12 @@ st.markdown("""
     
     .metric-delta.positive {
         background: rgba(92, 184, 92, 0.15);
-        color: #27a745;
+        color: var(--accent-color);
     }
     
     .metric-delta.negative {
         background: rgba(217, 83, 79, 0.15);
-        color: #dc3545;
+        color: var(--danger-color);
     }
     
     /* ===== NARRATIVE BOX ===== */
@@ -362,6 +514,45 @@ st.markdown("""
         color: white;
     }
     
+    /* ===== STYLED HTML TABLES ===== */
+    .styled-table-container {
+        overflow-x: auto;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-soft);
+        margin: 0.5rem 0;
+    }
+    
+    .styled-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--card-bg);
+        font-size: 0.85rem;
+    }
+    
+    .styled-table thead th {
+        background: var(--table-header-bg);
+        color: var(--text-primary);
+        padding: 0.75rem 0.5rem;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid var(--secondary-color);
+        white-space: nowrap;
+    }
+    
+    .styled-table tbody td {
+        padding: 0.6rem 0.5rem;
+        border-bottom: 1px solid var(--card-border);
+        color: var(--text-primary);
+    }
+    
+    .styled-table tbody tr:hover {
+        background: var(--table-row-hover);
+    }
+    
+    .styled-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    
     /* ===== DIVIDER ===== */
     hr {
         border: none;
@@ -379,6 +570,60 @@ st.markdown("""
         border-top-color: var(--primary-color) !important;
     }
 </style>
+
+<script>
+// Detect dark mode preference and apply styles to DataFrame components
+(function() {
+    function applyDarkModeToDataFrames() {
+        const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        if (isDarkMode) {
+            // Apply dark background to DataFrame containers
+            const dataFrames = document.querySelectorAll('[data-testid="stDataFrame"], [data-testid="stDataFrameResizable"]');
+            dataFrames.forEach(df => {
+                df.style.backgroundColor = 'rgba(30, 35, 45, 0.95)';
+                df.style.borderRadius = '12px';
+                df.style.overflow = 'hidden';
+                
+                // Apply to all child divs
+                const childDivs = df.querySelectorAll('div');
+                childDivs.forEach(div => {
+                    if (!div.querySelector('canvas')) {
+                        div.style.backgroundColor = 'rgba(30, 35, 45, 0.95)';
+                    }
+                });
+            });
+            
+            // Apply to canvas containers with a slight delay for Streamlit rendering
+            setTimeout(() => {
+                const canvasContainers = document.querySelectorAll('[data-testid="stDataFrame"] > div > div');
+                canvasContainers.forEach(container => {
+                    container.style.backgroundColor = 'rgba(30, 35, 45, 0.95)';
+                });
+            }, 100);
+        }
+    }
+    
+    // Run on load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applyDarkModeToDataFrames);
+    } else {
+        applyDarkModeToDataFrames();
+    }
+    
+    // Re-run when new content is added (Streamlit re-renders)
+    const observer = new MutationObserver(function(mutations) {
+        applyDarkModeToDataFrames();
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Listen for theme changes
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyDarkModeToDataFrames);
+    }
+})();
+</script>
 """, unsafe_allow_html=True)
 
 
@@ -392,6 +637,44 @@ def init_session_state():
         st.session_state.report = None
     if 'stats' not in st.session_state:
         st.session_state.stats = None
+
+
+def df_to_html_table(df: pd.DataFrame, max_rows: int = 15) -> str:
+    """Convert DataFrame to styled HTML table for dark mode compatibility.
+    
+    Args:
+        df: DataFrame to convert
+        max_rows: Maximum number of rows to display
+        
+    Returns:
+        HTML string of styled table
+    """
+    display_df = df.head(max_rows)
+    
+    # Build HTML table
+    html = '<div class="styled-table-container"><table class="styled-table">'
+    
+    # Header
+    html += '<thead><tr>'
+    for col in display_df.columns:
+        html += f'<th>{col}</th>'
+    html += '</tr></thead>'
+    
+    # Body
+    html += '<tbody>'
+    for _, row in display_df.iterrows():
+        html += '<tr>'
+        for val in row:
+            if isinstance(val, (int, float)):
+                formatted_val = f"{val:,.0f}".replace(",", ".")
+            else:
+                formatted_val = str(val)
+            html += f'<td>{formatted_val}</td>'
+        html += '</tr>'
+    html += '</tbody>'
+    
+    html += '</table></div>'
+    return html
 
 
 def render_header():
@@ -776,12 +1059,8 @@ def render_report(report, stats: dict):
                 if month in df.columns:
                     table_cols.append(month)
             
-            display_df = df[table_cols].head(15)
-            st.dataframe(
-                display_df,
-                hide_index=True,
-                use_container_width=True
-            )
+            display_df = df[table_cols]
+            st.markdown(df_to_html_table(display_df), unsafe_allow_html=True)
     
     st.markdown(f'<div class="narrative-box">{narratives.rekapitulasi_kab_kota}</div>', 
                 unsafe_allow_html=True)
@@ -803,8 +1082,8 @@ def render_report(report, stats: dict):
     with col2:
         # PM table per kab/kota
         if not df.empty:
-            pm_df = df[['Kabupaten/Kota', 'PMA', 'PMDN']].head(15)
-            st.dataframe(pm_df, hide_index=True, use_container_width=True)
+            pm_df = df[['Kabupaten/Kota', 'PMA', 'PMDN']]
+            st.markdown(df_to_html_table(pm_df), unsafe_allow_html=True)
     
     st.markdown(f'<div class="narrative-box">{narratives.status_pm}</div>', 
                 unsafe_allow_html=True)
@@ -826,8 +1105,8 @@ def render_report(report, stats: dict):
     with col2:
         # Pelaku usaha table
         if not df.empty:
-            pelaku_df = df[['Kabupaten/Kota', 'UMK', 'NON-UMK']].head(15)
-            st.dataframe(pelaku_df, hide_index=True, use_container_width=True)
+            pelaku_df = df[['Kabupaten/Kota', 'UMK', 'NON-UMK']]
+            st.markdown(df_to_html_table(pelaku_df), unsafe_allow_html=True)
     
     st.markdown(f'<div class="narrative-box">{narratives.pelaku_usaha}</div>', 
                 unsafe_allow_html=True)

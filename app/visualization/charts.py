@@ -54,9 +54,9 @@ class ChartGenerator:
         self.width = width
         self.height = height
         self.layout_defaults = {
-            'font': {'family': 'Arial, sans-serif', 'size': 12},
-            'paper_bgcolor': 'white',
-            'plot_bgcolor': 'white',
+            'font': {'family': 'Arial, sans-serif', 'size': 12, 'color': '#e8eaed'},
+            'paper_bgcolor': 'rgba(0,0,0,0)',
+            'plot_bgcolor': 'rgba(0,0,0,0)',
             'margin': {'l': 50, 'r': 50, 't': 60, 'b': 50},
         }
     
@@ -130,7 +130,8 @@ class ChartGenerator:
         
         # Set y-axis to start from 0
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.2], gridcolor='#f0f0f0')
+        fig.update_yaxes(range=[0, max_val * 1.2], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
         
         return fig
     
@@ -263,8 +264,8 @@ class ChartGenerator:
             **self.layout_defaults
         )
         
-        fig.update_xaxes(gridcolor='#f0f0f0')
-        fig.update_yaxes(tickfont={'size': 10})
+        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
+        fig.update_yaxes(tickfont={'size': 10, 'color': '#e8eaed'})
         
         return fig
     
@@ -382,7 +383,8 @@ class ChartGenerator:
         )
         
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.3], gridcolor='#f0f0f0')
+        fig.update_yaxes(range=[0, max_val * 1.3], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
         
         return fig
     
@@ -521,7 +523,8 @@ class ChartGenerator:
         )
         
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.25], gridcolor='#f0f0f0')
+        fig.update_yaxes(range=[0, max_val * 1.25], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
         
         return fig
     
@@ -575,18 +578,18 @@ class ChartGenerator:
         ))
         
         fig.update_layout(
-            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#555'}},
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
             xaxis_title='Jumlah Perizinan',
             width=self.width,
             height=max(350, len(labels) * 45),
             margin={'l': 100, 'r': 50, 't': 60, 'b': 50},
-            font={'family': 'Arial, sans-serif', 'size': 12},
-            paper_bgcolor='white',
-            plot_bgcolor='white',
+            font={'family': 'Arial, sans-serif', 'size': 12, 'color': '#e8eaed'},
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
         )
         
-        fig.update_xaxes(gridcolor='#f0f0f0', showgrid=True)
-        fig.update_yaxes(tickfont={'size': 11, 'color': '#555'})
+        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', showgrid=True, title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
+        fig.update_yaxes(tickfont={'size': 11, 'color': '#e8eaed'})
         
         return fig
     
