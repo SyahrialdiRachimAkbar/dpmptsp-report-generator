@@ -100,6 +100,8 @@ class ProyekReferenceData:
     monthly_tki: Dict[str, int] = field(default_factory=dict)  # Month → TKI count
     monthly_tka: Dict[str, int] = field(default_factory=dict)  # Month → TKA count
     monthly_projects: Dict[str, int] = field(default_factory=dict)  # Month → project count
+    monthly_pma_projects: Dict[str, int] = field(default_factory=dict)  # Month → PMA project count
+    monthly_pmdn_projects: Dict[str, int] = field(default_factory=dict)  # Month → PMDN project count
     monthly_by_wilayah: Dict[str, Dict[str, float]] = field(default_factory=dict)  # Month → Wilayah → investment
     
     def get_period_investment(self, months: List[str]) -> float:
@@ -125,6 +127,14 @@ class ProyekReferenceData:
     def get_period_projects(self, months: List[str]) -> int:
         """Get project count for specified months."""
         return sum(self.monthly_projects.get(m, 0) for m in months)
+    
+    def get_period_pma_projects(self, months: List[str]) -> int:
+        """Get PMA project count for specified months."""
+        return sum(self.monthly_pma_projects.get(m, 0) for m in months)
+    
+    def get_period_pmdn_projects(self, months: List[str]) -> int:
+        """Get PMDN project count for specified months."""
+        return sum(self.monthly_pmdn_projects.get(m, 0) for m in months)
     
     def get_period_by_wilayah(self, months: List[str]) -> Dict[str, float]:
         """Get investment by wilayah for specified months."""
@@ -553,8 +563,15 @@ class ReferenceDataLoader:
                 if tka_col:
                     result.monthly_tka[month] = int(month_df[tka_col].fillna(0).sum())
                 
-                # Project count
+                # Project count (total and by PM status)
                 result.monthly_projects[month] = len(month_df)
+                
+                # PMA and PMDN project counts
+                if pm_col:
+                    pma_df = month_df[month_df[pm_col].str.upper().str.contains('PMA', na=False) & ~month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
+                    pmdn_df = month_df[month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
+                    result.monthly_pma_projects[month] = len(pma_df)
+                    result.monthly_pmdn_projects[month] = len(pmdn_df)
             
             return result
             

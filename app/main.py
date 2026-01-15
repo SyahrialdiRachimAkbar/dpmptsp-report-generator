@@ -978,7 +978,8 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
                 current_inv_report.pmdn_total = proyek_data.get_period_pmdn(months)
                 current_inv_report.pma_tki = proyek_data.get_period_tki(months) # Simplified labor assignment
                 current_inv_report.pma_tka = proyek_data.get_period_tka(months)
-                current_inv_report.pma_proyek = proyek_data.get_period_projects(months) # Simplified
+                current_inv_report.pma_proyek = proyek_data.get_period_pma_projects(months)
+                current_inv_report.pmdn_proyek = proyek_data.get_period_pmdn_projects(months)
                 
                 # Populate Wilayah breakdown (InvestmentData objects)
                 wilayah_data = proyek_data.get_period_by_wilayah(months)
