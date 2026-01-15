@@ -812,6 +812,28 @@ def render_sidebar():
         return jenis_periode, periode, tahun
 
 
+@st.cache_data(show_spinner=False)
+def _cached_load_nib(file_content: bytes, filename: str, year: int):
+    """Cached NIB loader - only reloads when file content changes."""
+    from io import BytesIO
+    loader = ReferenceDataLoader()
+    return loader.load_nib(BytesIO(file_content), filename, year)
+
+@st.cache_data(show_spinner=False)
+def _cached_load_pb_oss(file_content: bytes, filename: str, year: int):
+    """Cached PB OSS loader - only reloads when file content changes."""
+    from io import BytesIO
+    loader = ReferenceDataLoader()
+    return loader.load_pb_oss(BytesIO(file_content), filename, year)
+
+@st.cache_data(show_spinner=False)
+def _cached_load_proyek(file_content: bytes, filename: str, year: int):
+    """Cached PROYEK loader - only reloads when file content changes."""
+    from io import BytesIO
+    loader = ReferenceDataLoader()
+    return loader.load_proyek(BytesIO(file_content), filename, year)
+
+
 def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     """Process uploaded reference files and generate report."""
     loader = ReferenceDataLoader()
@@ -828,8 +850,8 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     nib_file = st.session_state.get('nib_ref_file')
     if nib_file:
         try:
-            file_content = io.BytesIO(nib_file.getvalue())
-            nib_data = loader.load_nib(file_content, nib_file.name, year=tahun)
+            # Use cached loader for performance
+            nib_data = _cached_load_nib(nib_file.getvalue(), nib_file.name, tahun)
             
             if nib_data:
                 # Create PeriodReport structure manually
@@ -906,8 +928,8 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     pb_file = st.session_state.get('pb_oss_ref_file')
     if pb_file:
         try:
-            file_content = io.BytesIO(pb_file.getvalue())
-            pb_data = loader.load_pb_oss(file_content, pb_file.name, year=tahun)
+            # Use cached loader for performance
+            pb_data = _cached_load_pb_oss(pb_file.getvalue(), pb_file.name, tahun)
             
             if pb_data:
                 # Get risk and sector distribution for selected period
@@ -938,8 +960,8 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     proyek_file = st.session_state.get('proyek_ref_file')
     if proyek_file:
         try:
-            file_content = io.BytesIO(proyek_file.getvalue())
-            proyek_data = loader.load_proyek(file_content, proyek_file.name, year=tahun)
+            # Use cached loader for performance
+            proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, tahun)
             
             if proyek_data:
                 investment_reports = {} # Dict[periode_name, InvestmentReport]
