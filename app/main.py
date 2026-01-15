@@ -641,6 +641,12 @@ def init_session_state():
         st.session_state.investment_reports = None  # Dict[str, InvestmentReport]
     if 'investment_file' not in st.session_state:
         st.session_state.investment_file = None
+    if 'prev_year_investment_file' not in st.session_state:
+        st.session_state.prev_year_investment_file = None  # For Y-o-Y comparison
+    if 'tw_summary' not in st.session_state:
+        st.session_state.tw_summary = None  # Dict[str, TWSummary] for current year
+    if 'prev_year_tw_summary' not in st.session_state:
+        st.session_state.prev_year_tw_summary = None  # Dict[str, TWSummary] for previous year
 
 
 def df_to_html_table(df: pd.DataFrame, max_rows: int = 15) -> str:
@@ -737,6 +743,18 @@ def render_sidebar():
             st.session_state.investment_file = investment_file
             st.success(f"✅ {investment_file.name}")
         
+        # Previous year investment file (for Y-o-Y comparison)
+        prev_year_file = st.file_uploader(
+            "Upload data tahun sebelumnya (opsional)",
+            type=['xlsx', 'xls'],
+            help="Upload file REALISASI INVESTASI tahun sebelumnya untuk perbandingan Y-o-Y",
+            key="prev_year_uploader"
+        )
+        
+        if prev_year_file:
+            st.session_state.prev_year_investment_file = prev_year_file
+            st.info(f"📊 Y-o-Y: {prev_year_file.name}")
+        
         st.divider()
         
         # Period selection
@@ -787,6 +805,9 @@ def render_sidebar():
             st.session_state.aggregator = DataAggregator()
             st.session_state.investment_reports = None
             st.session_state.investment_file = None
+            st.session_state.prev_year_investment_file = None
+            st.session_state.tw_summary = None
+            st.session_state.prev_year_tw_summary = None
             st.rerun()
         
         return jenis_periode, periode, tahun
@@ -883,9 +904,26 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
             inv_content = io.BytesIO(inv_file.getvalue())
             investment_reports = loader.load_realisasi_investasi(inv_content, inv_file.name)
             st.session_state.investment_reports = investment_reports
+            
+            # Also parse TW summary for project comparison charts
+            inv_content.seek(0)
+            tw_summary = loader.parse_investment_summary(inv_content, inv_file.name)
+            st.session_state.tw_summary = tw_summary
         except Exception as e:
             print(f"Error loading investment data: {e}")
             st.session_state.investment_reports = None
+            st.session_state.tw_summary = None
+    
+    # Process previous year investment file for Y-o-Y comparison
+    if st.session_state.prev_year_investment_file:
+        try:
+            prev_file = st.session_state.prev_year_investment_file
+            prev_content = io.BytesIO(prev_file.getvalue())
+            prev_tw_summary = loader.parse_investment_summary(prev_content, prev_file.name)
+            st.session_state.prev_year_tw_summary = prev_tw_summary
+        except Exception as e:
+            print(f"Error loading previous year data: {e}")
+            st.session_state.prev_year_tw_summary = None
     
     st.session_state.report = report
     st.session_state.stats = stats
@@ -1280,6 +1318,122 @@ def render_report(report, stats: dict):
                 st.plotly_chart(fig_tw_comp, use_container_width=True)
         else:
             st.info(f"Data investasi untuk {periode_name} tidak tersedia dalam file yang diupload.")
+    
+    # Section: Rencana Proyek (if TW summary data available)
+    tw_summary = st.session_state.get('tw_summary', None)
+    if tw_summary:
+        st.markdown('<div class="section-title">3. Rencana Proyek</div>', 
+                    unsafe_allow_html=True)
+        
+        # Get current period's summary
+        periode_name = report.period_name
+        current_summary = tw_summary.get(periode_name)
+        
+        if current_summary:
+            # Project count chart
+            st.markdown('<div class="section-title">3.1 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
+                        unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Get project counts from InvestmentReport
+                inv_report = st.session_state.investment_reports.get(periode_name) if st.session_state.investment_reports else None
+                pma_proyek = inv_report.pma_proyek if inv_report else 0
+                pmdn_proyek = inv_report.pmdn_proyek if inv_report else 0
+                
+                # If no per-type data, use total proyek split estimate
+                if pma_proyek == 0 and pmdn_proyek == 0 and current_summary.proyek > 0:
+                    # Estimate based on investment ratio
+                    total_inv = current_summary.pma_rp + current_summary.pmdn_rp
+                    if total_inv > 0:
+                        pma_ratio = current_summary.pma_rp / total_inv
+                        pmdn_ratio = current_summary.pmdn_rp / total_inv
+                        pma_proyek = int(current_summary.proyek * pma_ratio)
+                        pmdn_proyek = current_summary.proyek - pma_proyek
+                
+                fig_project = chart_gen.create_project_count_chart(
+                    pma_proyek=pma_proyek,
+                    pmdn_proyek=pmdn_proyek
+                )
+                st.plotly_chart(fig_project, use_container_width=True)
+            
+            with col2:
+                # Show summary metrics
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{current_summary.proyek:,}</div>
+                    <div class="metric-label">Total Proyek {periode_name}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+                
+                st.markdown(f'''
+                <div class="metric-card" style="margin-top: 1rem;">
+                    <div class="metric-value">{current_summary.percentage:.1f}%</div>
+                    <div class="metric-label">Pencapaian Target</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            # Q-o-Q Comparison (if previous TW exists)
+            tw_order = ["TW I", "TW II", "TW III", "TW IV"]
+            current_idx = tw_order.index(periode_name) if periode_name in tw_order else -1
+            
+            if current_idx > 0:
+                previous_tw = tw_order[current_idx - 1]
+                previous_summary = tw_summary.get(previous_tw)
+                
+                if previous_summary:
+                    st.markdown('<div class="section-title">3.2 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
+                                unsafe_allow_html=True)
+                    
+                    # Calculate project counts for Q-o-Q
+                    prev_inv = st.session_state.investment_reports.get(previous_tw) if st.session_state.investment_reports else None
+                    prev_pma = prev_inv.pma_proyek if prev_inv else 0
+                    prev_pmdn = prev_inv.pmdn_proyek if prev_inv else 0
+                    
+                    # Fallback estimation
+                    if prev_pma == 0 and prev_pmdn == 0 and previous_summary.proyek > 0:
+                        total_inv = previous_summary.pma_rp + previous_summary.pmdn_rp
+                        if total_inv > 0:
+                            prev_pma = int(previous_summary.proyek * (previous_summary.pma_rp / total_inv))
+                            prev_pmdn = previous_summary.proyek - prev_pma
+                    
+                    fig_qoq = chart_gen.create_qoq_comparison_chart(
+                        current_tw=periode_name,
+                        current_data={"pma": pma_proyek, "pmdn": pmdn_proyek},
+                        previous_tw=previous_tw,
+                        previous_data={"pma": prev_pma, "pmdn": prev_pmdn}
+                    )
+                    st.plotly_chart(fig_qoq, use_container_width=True)
+            
+            # Y-o-Y Comparison (if previous year data available)
+            prev_year_summary = st.session_state.get('prev_year_tw_summary', None)
+            if prev_year_summary:
+                prev_year_tw = prev_year_summary.get(periode_name)
+                
+                if prev_year_tw:
+                    st.markdown('<div class="section-title">3.3 Perbandingan Y-o-Y (Year-over-Year)</div>', 
+                                unsafe_allow_html=True)
+                    
+                    # Estimate project counts for previous year
+                    prev_year_pma = 0
+                    prev_year_pmdn = 0
+                    if prev_year_tw.proyek > 0:
+                        total_inv = prev_year_tw.pma_rp + prev_year_tw.pmdn_rp
+                        if total_inv > 0:
+                            prev_year_pma = int(prev_year_tw.proyek * (prev_year_tw.pma_rp / total_inv))
+                            prev_year_pmdn = prev_year_tw.proyek - prev_year_pma
+                    
+                    fig_yoy = chart_gen.create_yoy_comparison_chart(
+                        tw_name=periode_name,
+                        current_year=current_summary.year,
+                        current_data={"pma": pma_proyek, "pmdn": pmdn_proyek},
+                        previous_year=prev_year_tw.year,
+                        previous_data={"pma": prev_year_pma, "pmdn": prev_year_pmdn}
+                    )
+                    st.plotly_chart(fig_yoy, use_container_width=True)
+        else:
+            st.info(f"Data ringkasan proyek untuk {periode_name} tidak tersedia.")
     
     # Section: Kesimpulan
     st.markdown('<div class="section-title">Kesimpulan</div>', unsafe_allow_html=True)

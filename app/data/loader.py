@@ -77,6 +77,21 @@ class InvestmentData:
 
 
 @dataclass
+class TWSummary:
+    """Summary data for a Triwulan from the main summary sheet"""
+    triwulan: str  # e.g., "TW I", "TW II"
+    year: int
+    pma_rp: float = 0  # PMA investment value
+    pmdn_rp: float = 0  # PMDN investment value
+    total_rp: float = 0  # Total investment (PMA + PMDN)
+    proyek: int = 0  # Total projects
+    tki: int = 0  # Total TKI
+    tka: int = 0  # Total TKA
+    target_rp: float = 0  # Annual target (optional)
+    percentage: float = 0  # % of target achieved
+
+
+@dataclass
 class InvestmentReport:
     """Investment realization report for a specific period (Triwulan)"""
     triwulan: str  # e.g., "TW I", "TW II"
@@ -1034,9 +1049,140 @@ class DataLoader:
                 ))
         
         return results
-
-
-# Convenience function
+    
+    def parse_investment_summary(self, file_bytes: io.BytesIO, filename: str = "") -> Dict[str, TWSummary]:
+        """
+        Parse the summary sheet from REALISASI INVESTASI file.
+        Returns Dict mapping TW name to TWSummary.
+        
+        Args:
+            file_bytes: BytesIO object of the Excel file
+            filename: Original filename to detect year
+            
+        Returns:
+            Dict[str, TWSummary]: e.g., {"TW I": TWSummary(...), "TW II": TWSummary(...)}
+        """
+        results = {}
+        
+        # Detect year from filename
+        year = 2025
+        import re
+        year_match = re.search(r'(\d{4})', filename)
+        if year_match:
+            year = int(year_match.group(1))
+        
+        try:
+            xl = pd.ExcelFile(file_bytes)
+        except Exception as e:
+            print(f"Error reading Excel file: {e}")
+            return results
+        
+        # Find summary sheet (pattern: REALISASI INVESTASI YYYY or similar)
+        summary_sheet = None
+        for sheet in xl.sheet_names:
+            if 'REALISASI INVESTASI' in sheet.upper() and any(c.isdigit() for c in sheet):
+                summary_sheet = sheet
+                break
+            elif sheet.upper().startswith('REALISASI INVESTASI'):
+                summary_sheet = sheet
+                break
+        
+        if not summary_sheet:
+            return results
+        
+        try:
+            df = pd.read_excel(xl, sheet_name=summary_sheet, header=None)
+        except Exception as e:
+            print(f"Error reading summary sheet: {e}")
+            return results
+        
+        # Find target value (usually in row with TARGET)
+        target_rp = 0
+        for idx in range(min(10, len(df))):
+            row = df.iloc[idx]
+            for col_idx, val in enumerate(row):
+                if pd.notna(val) and 'TARGET' in str(val).upper():
+                    # Target value is usually in column 1
+                    try:
+                        target_rp = float(df.iloc[idx, 1]) if pd.notna(df.iloc[idx, 1]) else 0
+                    except:
+                        pass
+                    break
+        
+        # Parse TW rows
+        # Structure: PERIODE column has TW I, TW II, etc.
+        # Columns: NO, TARGET, PERIODE, PMA(Rp.), PMDN(Rp.), JUMLAH(Rp.), %, PROYEK, TKI, TKA
+        tw_patterns = ["TW I", "TW II", "TW III", "TW IV"]
+        
+        for idx in range(len(df)):
+            row = df.iloc[idx]
+            row_str = ' '.join(str(v).upper().strip() for v in row if pd.notna(v))
+            
+            for tw in tw_patterns:
+                # Check if this row contains exactly this TW (not as part of another)
+                if tw.upper() in row_str:
+                    # Find which cell has the TW value
+                    periode_col = None
+                    for col_idx, val in enumerate(row):
+                        if pd.notna(val) and tw.upper() == str(val).upper().strip():
+                            periode_col = col_idx
+                            break
+                    
+                    if periode_col is None:
+                        continue
+                    
+                    # Extract values based on column positions relative to PERIODE
+                    # Usually: PERIODE(2), PMA(3), PMDN(4), JUMLAH(5), %(6), PROYEK(7), TKI(8), TKA(9)
+                    def safe_float(val):
+                        if pd.isna(val):
+                            return 0.0
+                        try:
+                            return float(val)
+                        except:
+                            return 0.0
+                    
+                    def safe_int(val):
+                        if pd.isna(val):
+                            return 0
+                        try:
+                            return int(float(val))
+                        except:
+                            return 0
+                    
+                    # Get values - adjust indices based on actual structure
+                    pma_col = periode_col + 1
+                    pmdn_col = periode_col + 2
+                    total_col = periode_col + 3
+                    pct_col = periode_col + 4
+                    proyek_col = periode_col + 5
+                    tki_col = periode_col + 6
+                    tka_col = periode_col + 7
+                    
+                    pma_rp = safe_float(row.iloc[pma_col]) if len(row) > pma_col else 0
+                    pmdn_rp = safe_float(row.iloc[pmdn_col]) if len(row) > pmdn_col else 0
+                    total_rp = safe_float(row.iloc[total_col]) if len(row) > total_col else 0
+                    percentage = safe_float(row.iloc[pct_col]) if len(row) > pct_col else 0
+                    proyek = safe_int(row.iloc[proyek_col]) if len(row) > proyek_col else 0
+                    tki = safe_int(row.iloc[tki_col]) if len(row) > tki_col else 0
+                    tka = safe_int(row.iloc[tka_col]) if len(row) > tka_col else 0
+                    
+                    # Only add if we have meaningful data
+                    if pma_rp > 0 or pmdn_rp > 0 or proyek > 0:
+                        results[tw] = TWSummary(
+                            triwulan=tw,
+                            year=year,
+                            pma_rp=pma_rp,
+                            pmdn_rp=pmdn_rp,
+                            total_rp=total_rp if total_rp > 0 else (pma_rp + pmdn_rp),
+                            proyek=proyek,
+                            tki=tki,
+                            tka=tka,
+                            target_rp=target_rp,
+                            percentage=percentage
+                        )
+                    break  # Found this TW, move to next row
+        
+        return results
 def load_excel_file(file_path: str | Path) -> Dict:
     """
     Convenience function to load an Excel file.

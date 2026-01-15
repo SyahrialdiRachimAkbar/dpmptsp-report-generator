@@ -888,4 +888,239 @@ class ChartGenerator:
         fig.update_xaxes(tickfont={'color': '#e8eaed'})
         
         return fig
+    
+    def create_project_count_chart(
+        self,
+        pma_proyek: int,
+        pmdn_proyek: int,
+        title: str = "Jumlah Proyek Berdasarkan Status Penanaman Modal"
+    ) -> go.Figure:
+        """
+        Create a bar chart showing project counts by investment status (PMA vs PMDN).
+        
+        Args:
+            pma_proyek: Number of PMA projects
+            pmdn_proyek: Number of PMDN projects
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        categories = ['PMA', 'PMDN']
+        values = [pma_proyek, pmdn_proyek]
+        colors = [self.COLORS['pma'], self.COLORS['pmdn']]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=categories,
+            y=values,
+            marker_color=colors,
+            text=[f'{v:,}' for v in values],
+            textposition='outside',
+            textfont={'size': 14, 'color': '#e8eaed'},
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            yaxis_title='Jumlah Proyek',
+            width=self.width,
+            height=400,
+            **self.layout_defaults
+        )
+        
+        fig.update_yaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
+        
+        return fig
+    
+    def create_qoq_comparison_chart(
+        self,
+        current_tw: str,
+        current_data: Dict,  # {"pma": int, "pmdn": int}
+        previous_tw: str,
+        previous_data: Dict,  # {"pma": int, "pmdn": int}
+        title: str = None
+    ) -> go.Figure:
+        """
+        Create a grouped bar chart comparing Q-o-Q (Quarter-over-Quarter) with percentage labels.
+        
+        Args:
+            current_tw: Current triwulan name (e.g., "TW II")
+            current_data: Dict with pma and pmdn project counts for current TW
+            previous_tw: Previous triwulan name (e.g., "TW I")
+            previous_data: Dict with pma and pmdn project counts for previous TW
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        if title is None:
+            title = f"Perbandingan Proyek {previous_tw} vs {current_tw} (Q-o-Q)"
+        
+        categories = ['PMA', 'PMDN']
+        prev_values = [previous_data.get('pma', 0), previous_data.get('pmdn', 0)]
+        curr_values = [current_data.get('pma', 0), current_data.get('pmdn', 0)]
+        
+        # Calculate percentage changes
+        pct_changes = []
+        for prev, curr in zip(prev_values, curr_values):
+            if prev > 0:
+                pct = ((curr - prev) / prev) * 100
+            else:
+                pct = 100 if curr > 0 else 0
+            pct_changes.append(pct)
+        
+        fig = go.Figure()
+        
+        # Previous TW bars
+        fig.add_trace(go.Bar(
+            name=previous_tw,
+            x=categories,
+            y=prev_values,
+            marker_color='#f0ad4e',  # warning/orange
+            text=[f'{v:,}' for v in prev_values],
+            textposition='outside',
+            textfont={'size': 11, 'color': '#e8eaed'},
+        ))
+        
+        # Current TW bars
+        fig.add_trace(go.Bar(
+            name=current_tw,
+            x=categories,
+            y=curr_values,
+            marker_color=self.COLORS['accent'],  # green
+            text=[f'{v:,}' for v in curr_values],
+            textposition='outside',
+            textfont={'size': 11, 'color': '#e8eaed'},
+        ))
+        
+        # Add percentage change annotations
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#5cb85c' if pct >= 0 else '#d9534f'
+            arrow = '↑' if pct >= 0 else '↓'
+            fig.add_annotation(
+                x=cat,
+                y=max(prev_values[i], curr_values[i]) * 1.15,
+                text=f"{arrow} {abs(pct):.1f}%",
+                showarrow=False,
+                font={'size': 12, 'color': color, 'family': 'Arial Black'}
+            )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            yaxis_title='Jumlah Proyek',
+            barmode='group',
+            width=self.width,
+            height=450,
+            legend={'x': 0.85, 'y': 0.95},
+            **self.layout_defaults
+        )
+        
+        fig.update_yaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
+        
+        return fig
+    
+    def create_yoy_comparison_chart(
+        self,
+        tw_name: str,
+        current_year: int,
+        current_data: Dict,  # {"pma": int, "pmdn": int}
+        previous_year: int,
+        previous_data: Dict,  # {"pma": int, "pmdn": int}
+        title: str = None
+    ) -> go.Figure:
+        """
+        Create a grouped bar chart comparing Y-o-Y (Year-over-Year) with percentage labels.
+        
+        Args:
+            tw_name: Triwulan name (e.g., "TW II")
+            current_year: Current year
+            current_data: Dict with pma and pmdn project counts for current year
+            previous_year: Previous year
+            previous_data: Dict with pma and pmdn project counts for previous year
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        if title is None:
+            title = f"Perbandingan Proyek {tw_name} {previous_year} vs {current_year} (Y-o-Y)"
+        
+        categories = ['PMA', 'PMDN']
+        prev_values = [previous_data.get('pma', 0), previous_data.get('pmdn', 0)]
+        curr_values = [current_data.get('pma', 0), current_data.get('pmdn', 0)]
+        
+        # Calculate percentage changes
+        pct_changes = []
+        for prev, curr in zip(prev_values, curr_values):
+            if prev > 0:
+                pct = ((curr - prev) / prev) * 100
+            else:
+                pct = 100 if curr > 0 else 0
+            pct_changes.append(pct)
+        
+        fig = go.Figure()
+        
+        # Previous year bars
+        fig.add_trace(go.Bar(
+            name=f'{tw_name} {previous_year}',
+            x=categories,
+            y=prev_values,
+            marker_color='#3498db',  # blue
+            text=[f'{v:,}' for v in prev_values],
+            textposition='outside',
+            textfont={'size': 11, 'color': '#e8eaed'},
+        ))
+        
+        # Current year bars
+        fig.add_trace(go.Bar(
+            name=f'{tw_name} {current_year}',
+            x=categories,
+            y=curr_values,
+            marker_color=self.COLORS['accent'],  # green
+            text=[f'{v:,}' for v in curr_values],
+            textposition='outside',
+            textfont={'size': 11, 'color': '#e8eaed'},
+        ))
+        
+        # Add percentage change annotations
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#5cb85c' if pct >= 0 else '#d9534f'
+            arrow = '↑' if pct >= 0 else '↓'
+            fig.add_annotation(
+                x=cat,
+                y=max(prev_values[i], curr_values[i]) * 1.15,
+                text=f"{arrow} {abs(pct):.1f}%",
+                showarrow=False,
+                font={'size': 12, 'color': color, 'family': 'Arial Black'}
+            )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#e8eaed'}},
+            yaxis_title='Jumlah Proyek',
+            barmode='group',
+            width=self.width,
+            height=450,
+            legend={'x': 0.85, 'y': 0.95},
+            **self.layout_defaults
+        )
+        
+        fig.update_yaxes(
+            gridcolor='rgba(150,150,150,0.3)',
+            tickfont={'color': '#e8eaed'},
+            title_font={'color': '#e8eaed'}
+        )
+        fig.update_xaxes(tickfont={'color': '#e8eaed'})
+        
+        return fig
 
