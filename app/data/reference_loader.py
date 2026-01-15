@@ -445,6 +445,11 @@ class ReferenceDataLoader:
             
             result = PBOSSReferenceData(year=year)
             
+            # Filter by Kewenangan = Gubernur
+            kewenangan_col = self._find_column(df, ['kewenangan'])
+            if kewenangan_col:
+                df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
+            
             # Process per month
             for month in NAMA_BULAN:
                 month_df = df[df['_month'] == month]
@@ -513,6 +518,11 @@ class ReferenceDataLoader:
                 df['_month'] = 'Januari'
             
             result = ProyekReferenceData(year=year)
+            
+            # Filter by Kewenangan = Gubernur
+            kewenangan_col = self._find_column(df, ['kewenangan'])
+            if kewenangan_col:
+                df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
             
             # Process per month (sum all, no dedup)
             for month in NAMA_BULAN:
