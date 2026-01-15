@@ -7,6 +7,7 @@ NIB (Nomor Induk Berusaha) data from DPMPTSP Provinsi Lampung.
 
 import pandas as pd
 import re
+import io
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
