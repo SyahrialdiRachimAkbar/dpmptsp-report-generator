@@ -1378,9 +1378,12 @@ def render_report(report, stats: dict):
             tw_order = ["TW I", "TW II", "TW III", "TW IV"]
             current_idx = tw_order.index(periode_name) if periode_name in tw_order else -1
             
+            # Debug: show available TW data
+            available_tws = list(tw_summary.keys()) if tw_summary else []
+            
             if current_idx > 0:
                 previous_tw = tw_order[current_idx - 1]
-                previous_summary = tw_summary.get(previous_tw)
+                previous_summary = tw_summary.get(previous_tw) if tw_summary else None
                 
                 if previous_summary:
                     st.markdown('<div class="section-title">3.2 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
@@ -1405,6 +1408,11 @@ def render_report(report, stats: dict):
                         previous_data={"pma": prev_pma, "pmdn": prev_pmdn}
                     )
                     st.plotly_chart(fig_qoq, use_container_width=True)
+                else:
+                    st.info(f"Data {previous_tw} tidak tersedia untuk perbandingan Q-o-Q. Data yang tersedia: {available_tws}")
+            else:
+                if periode_name == "TW I":
+                    st.info("Perbandingan Q-o-Q tidak tersedia untuk TW I (tidak ada triwulan sebelumnya).")
             
             # Y-o-Y Comparison (if previous year data available)
             prev_year_summary = st.session_state.get('prev_year_tw_summary', None)
