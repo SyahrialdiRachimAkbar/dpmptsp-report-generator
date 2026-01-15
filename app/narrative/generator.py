@@ -290,3 +290,194 @@ DPMPTSP Provinsi Lampung terus berkomitmen untuk meningkatkan pelayanan perizina
             return generator(report, stats)
         
         return ""
+    
+    def generate_investment_narrative(
+        self,
+        report,  # PeriodReport
+        current_investment,  # InvestmentReport
+        tw_summary=None,  # Dict[str, TWSummary]
+        prev_year_summary=None  # Dict[str, TWSummary] for Y-o-Y
+    ) -> str:
+        """
+        Generate narrative for investment realization section.
+        
+        Args:
+            report: PeriodReport object
+            current_investment: InvestmentReport for current period
+            tw_summary: Optional dict of TWSummary for Q-o-Q comparison
+            prev_year_summary: Optional dict of TWSummary for Y-o-Y comparison
+        
+        Returns:
+            Narrative text for investment section
+        """
+        if not current_investment:
+            return "Data realisasi investasi belum tersedia."
+        
+        periode_name = report.period_name
+        year = report.year
+        
+        # Format investment values
+        pma = current_investment.pma_total
+        pmdn = current_investment.pmdn_total
+        total = pma + pmdn
+        
+        # Convert to readable format (Miliar/Triliun)
+        def format_rupiah(val):
+            if val >= 1e12:
+                return f"Rp {val/1e12:.2f} Triliun"
+            elif val >= 1e9:
+                return f"Rp {val/1e9:.1f} Miliar"
+            else:
+                return f"Rp {val/1e6:.1f} Juta"
+        
+        pma_str = format_rupiah(pma)
+        pmdn_str = format_rupiah(pmdn)
+        total_str = format_rupiah(total)
+        
+        # Calculate percentages
+        pma_pct = (pma / total * 100) if total > 0 else 0
+        pmdn_pct = (pmdn / total * 100) if total > 0 else 0
+        
+        # Dominant type analysis
+        if pmdn > pma:
+            dominant = "PMDN (Penanaman Modal Dalam Negeri)"
+            dominant_pct = pmdn_pct
+            insight = "Hal ini menunjukkan tingginya kepercayaan investor domestik terhadap potensi ekonomi Provinsi Lampung."
+        else:
+            dominant = "PMA (Penanaman Modal Asing)"
+            dominant_pct = pma_pct
+            insight = "Hal ini menunjukkan daya tarik Provinsi Lampung bagi investor asing."
+        
+        # Q-o-Q comparison
+        qoq_text = ""
+        if tw_summary and periode_name in ["TW II", "TW III", "TW IV"]:
+            tw_order = ["TW I", "TW II", "TW III", "TW IV"]
+            idx = tw_order.index(periode_name)
+            prev_tw = tw_order[idx - 1]
+            prev_data = tw_summary.get(prev_tw)
+            curr_data = tw_summary.get(periode_name)
+            
+            if prev_data and curr_data:
+                prev_total = prev_data.total_rp
+                curr_total = curr_data.total_rp
+                if prev_total > 0:
+                    change = ((curr_total - prev_total) / prev_total) * 100
+                    if change > 0:
+                        qoq_text = f"\n\nDibandingkan dengan {prev_tw}, realisasi investasi mengalami peningkatan sebesar {change:.1f}%. "
+                    else:
+                        qoq_text = f"\n\nDibandingkan dengan {prev_tw}, realisasi investasi mengalami penurunan sebesar {abs(change):.1f}%. "
+        
+        # Y-o-Y comparison
+        yoy_text = ""
+        if prev_year_summary and periode_name in prev_year_summary:
+            prev_year_data = prev_year_summary.get(periode_name)
+            curr_data = tw_summary.get(periode_name) if tw_summary else None
+            
+            if prev_year_data and curr_data:
+                prev_total = prev_year_data.total_rp
+                curr_total = curr_data.total_rp
+                prev_year = prev_year_data.year
+                if prev_total > 0:
+                    change = ((curr_total - prev_total) / prev_total) * 100
+                    if change > 0:
+                        yoy_text = f"Secara tahunan (Y-o-Y), realisasi investasi {periode_name} meningkat {change:.1f}% dibandingkan periode yang sama tahun {prev_year}."
+                    else:
+                        yoy_text = f"Secara tahunan (Y-o-Y), realisasi investasi {periode_name} menurun {abs(change):.1f}% dibandingkan periode yang sama tahun {prev_year}."
+        
+        # Labor absorption
+        tki = getattr(current_investment, 'total_tki', 0)
+        tka = getattr(current_investment, 'total_tka', 0)
+        total_labor = tki + tka
+        labor_text = ""
+        if total_labor > 0:
+            tki_formatted = f"{tki:,}".replace(",", ".")
+            tka_formatted = f"{tka:,}".replace(",", ".")
+            labor_text = f"\n\nDari segi penyerapan tenaga kerja, investasi pada {periode_name} menyerap {tki_formatted} Tenaga Kerja Indonesia (TKI) dan {tka_formatted} Tenaga Kerja Asing (TKA)."
+        
+        text = f"""Realisasi investasi di Provinsi Lampung pada {periode_name} {year} mencapai {total_str}, terdiri dari PMA sebesar {pma_str} ({pma_pct:.1f}%) dan PMDN sebesar {pmdn_str} ({pmdn_pct:.1f}%).
+
+{dominant} mendominasi dengan kontribusi {dominant_pct:.1f}%. {insight}{qoq_text}{yoy_text}{labor_text}"""
+        
+        return text
+    
+    def generate_project_narrative(
+        self,
+        report,  # PeriodReport
+        current_summary,  # TWSummary
+        tw_summary=None,  # Dict[str, TWSummary]
+        prev_year_summary=None  # Dict[str, TWSummary]
+    ) -> str:
+        """
+        Generate narrative for project realization section (Rencana Proyek).
+        
+        Args:
+            report: PeriodReport object
+            current_summary: TWSummary for current period
+            tw_summary: Optional dict of TWSummary for Q-o-Q
+            prev_year_summary: Optional dict for Y-o-Y
+        
+        Returns:
+            Narrative text for project section
+        """
+        if not current_summary:
+            return "Data rekapitulasi proyek belum tersedia."
+        
+        periode_name = report.period_name
+        year = report.year
+        
+        # Project count
+        total_proyek = current_summary.proyek
+        target_pct = current_summary.percentage
+        
+        proyek_formatted = f"{total_proyek:,}".replace(",", ".")
+        
+        # Target achievement analysis
+        if target_pct >= 100:
+            target_insight = f"Pencapaian ini telah melampaui target tahunan ({target_pct:.1f}%)."
+        elif target_pct >= 75:
+            target_insight = f"Pencapaian sudah mencapai {target_pct:.1f}% dari target tahunan."
+        elif target_pct >= 50:
+            target_insight = f"Pencapaian baru mencapai {target_pct:.1f}% dari target, perlu akselerasi di periode berikutnya."
+        else:
+            target_insight = f"Pencapaian masih {target_pct:.1f}% dari target, perlu upaya signifikan untuk mencapai target."
+        
+        # Q-o-Q comparison
+        qoq_text = ""
+        if tw_summary and periode_name in ["TW II", "TW III", "TW IV"]:
+            tw_order = ["TW I", "TW II", "TW III", "TW IV"]
+            idx = tw_order.index(periode_name)
+            prev_tw = tw_order[idx - 1]
+            prev_data = tw_summary.get(prev_tw)
+            
+            if prev_data:
+                prev_proyek = prev_data.proyek
+                if prev_proyek > 0:
+                    change = ((total_proyek - prev_proyek) / prev_proyek) * 100
+                    prev_formatted = f"{prev_proyek:,}".replace(",", ".")
+                    if change > 0:
+                        qoq_text = f"\n\nDibandingkan dengan {prev_tw} ({prev_formatted} proyek), jumlah proyek meningkat {change:.1f}%."
+                    else:
+                        qoq_text = f"\n\nDibandingkan dengan {prev_tw} ({prev_formatted} proyek), jumlah proyek menurun {abs(change):.1f}%."
+        
+        # Y-o-Y comparison
+        yoy_text = ""
+        if prev_year_summary and periode_name in prev_year_summary:
+            prev_year_data = prev_year_summary.get(periode_name)
+            
+            if prev_year_data:
+                prev_proyek = prev_year_data.proyek
+                prev_year = prev_year_data.year
+                if prev_proyek > 0:
+                    change = ((total_proyek - prev_proyek) / prev_proyek) * 100
+                    prev_formatted = f"{prev_proyek:,}".replace(",", ".")
+                    if change > 0:
+                        yoy_text = f"\n\nSecara tahunan, jumlah proyek {periode_name} {year} meningkat {change:.1f}% dari periode yang sama tahun {prev_year} ({prev_formatted} proyek)."
+                    else:
+                        yoy_text = f"\n\nSecara tahunan, jumlah proyek {periode_name} {year} menurun {abs(change):.1f}% dari periode yang sama tahun {prev_year} ({prev_formatted} proyek)."
+        
+        text = f"""Pada {periode_name} {year}, tercatat {proyek_formatted} proyek investasi di Provinsi Lampung. {target_insight}{qoq_text}{yoy_text}
+
+Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikator penting dalam perencanaan kebijakan investasi ke depan."""
+        
+        return text
+
