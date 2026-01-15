@@ -18,8 +18,9 @@ from datetime import datetime
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.data.loader import DataLoader
-from app.data.aggregator import DataAggregator
+from app.data.loader import DataLoader, InvestmentReport, InvestmentData, TWSummary
+from app.data.aggregator import DataAggregator, PeriodReport, AggregatedNIBData
+from app.data.reference_loader import ReferenceDataLoader
 from app.visualization.charts import ChartGenerator
 from app.narrative.generator import NarrativeGenerator
 from app.config import LOGO_PATH, TRIWULAN_KE_BULAN, NAMA_BULAN
@@ -708,63 +709,60 @@ def render_header():
 def render_sidebar():
     """Render sidebar with file upload and period selection."""
     with st.sidebar:
-        st.header("📁 Upload Data")
+        st.header("📁 Upload Data Reference")
         
-        # File uploader
-        uploaded_files = st.file_uploader(
-            "Upload file Excel bulanan",
+        # 1. Upload NIB
+        nib_file = st.file_uploader(
+            "Upload File NIB (.xlsx)",
             type=['xlsx', 'xls'],
-            accept_multiple_files=True,
-            help="Upload file OLAH DATA OSS BULAN *.xlsx"
+            key="nib_uploader",
+            help="File yang berisi data NIB (Sheet 1)"
         )
-        
-        if uploaded_files:
-            for file in uploaded_files:
-                if file.name not in [f.name for f in st.session_state.loaded_files]:
-                    st.session_state.loaded_files.append(file)
+        if nib_file:
+            st.session_state.nib_ref_file = nib_file
+            st.success(f"✅ NIB: {nib_file.name}")
             
-            st.success(f"✅ {len(st.session_state.loaded_files)} file diupload")
+        # 2. Upload PB OSS
+        pb_oss_file = st.file_uploader(
+            "Upload File PB OSS (.xlsx)",
+            type=['xlsx', 'xls'],
+            key="pb_oss_uploader",
+            help="File yang berisi data Perizinan Berusaha (RISIKO/SEKTOR/Sheet 1)"
+        )
+        if pb_oss_file:
+            st.session_state.pb_oss_ref_file = pb_oss_file
+            st.success(f"✅ PB OSS: {pb_oss_file.name}")
             
-            # Show uploaded files
-            with st.expander("File yang diupload"):
-                for f in st.session_state.loaded_files:
-                    st.text(f"• {f.name}")
-        
-        # Investment file uploader
-        st.subheader("📊 Data Investasi")
-        investment_file = st.file_uploader(
-            "Upload file REALISASI INVESTASI",
+        # 3. Upload PROYEK
+        proyek_file = st.file_uploader(
+            "Upload File PROYEK (.xlsx)",
             type=['xlsx', 'xls'],
-            help="Upload file REALISASI INVESTASI TAHUN *.xlsx",
-            key="investment_uploader"
+            key="proyek_uploader", 
+            help="File yang berisi data Realisasi Investasi"
         )
-        
-        if investment_file:
-            st.session_state.investment_file = investment_file
-            st.success(f"✅ {investment_file.name}")
-        
-        # Previous year investment file (for Y-o-Y comparison)
-        prev_year_file = st.file_uploader(
-            "Upload data tahun sebelumnya (opsional)",
-            type=['xlsx', 'xls'],
-            help="Upload file REALISASI INVESTASI tahun sebelumnya untuk perbandingan Y-o-Y",
-            key="prev_year_uploader"
-        )
-        
-        if prev_year_file:
-            st.session_state.prev_year_investment_file = prev_year_file
-            st.info(f"📊 Y-o-Y: {prev_year_file.name}")
-        
+        if proyek_file:
+            st.session_state.proyek_ref_file = proyek_file
+            st.success(f"✅ PROYEK: {proyek_file.name}")
+            
         st.divider()
         
         # Period selection
         st.header("📅 Pilih Periode")
         
-        tahun = st.selectbox(
-            "Tahun",
-            options=[2025, 2024, 2023, 2026],
-            index=0
-        )
+        # Year selection (Auto-detect from files if possible, else manual)
+        detected_year = 2025
+        # Try to detect from files
+        loader = ReferenceDataLoader()
+        if st.session_state.get('nib_ref_file'):
+            y = loader.extract_year_from_filename(st.session_state.nib_ref_file.name)
+            if y: detected_year = y
+        elif st.session_state.get('proyek_ref_file'):
+            y = loader.extract_year_from_filename(st.session_state.proyek_ref_file.name)
+            if y: detected_year = y
+            
+        tahun_options = [detected_year] + [y for y in [2026, 2025, 2024, 2023] if y != detected_year]
+        
+        tahun = st.selectbox("Tahun", options=tahun_options)
         
         jenis_periode = st.radio(
             "Jenis Periode",
@@ -772,159 +770,219 @@ def render_sidebar():
             index=0
         )
         
+        periode = str(tahun)
         if jenis_periode == "Triwulan":
-            periode = st.selectbox(
-                "Pilih Triwulan",
-                options=["TW I", "TW II", "TW III", "TW IV"]
-            )
+            periode = st.selectbox("Pilih Triwulan", options=["TW I", "TW II", "TW III", "TW IV"])
         elif jenis_periode == "Semester":
-            periode = st.selectbox(
-                "Pilih Semester",
-                options=["Semester I", "Semester II"]
-            )
-        else:
-            periode = str(tahun)
-        
+            periode = st.selectbox("Pilih Semester", options=["Semester I", "Semester II"])
+            
         st.divider()
         
-        # Generate button
         if st.button("🚀 Generate Laporan", type="primary", use_container_width=True):
-            if not st.session_state.loaded_files:
-                st.error("⚠️ Upload file data terlebih dahulu!")
-            else:
-                with st.spinner("Memproses data..."):
-                    process_data(st.session_state.loaded_files, jenis_periode, periode, tahun)
-                st.success("✅ Laporan berhasil dibuat!")
-                st.rerun()
-        
+             # Check if at least one file is uploaded
+             if not (st.session_state.get('nib_ref_file') or 
+                     st.session_state.get('pb_oss_ref_file') or 
+                     st.session_state.get('proyek_ref_file')):
+                 st.error("⚠️ Upload minimal satu file referensi!")
+             else:
+                 with st.spinner("Memproses data..."):
+                     # Pass empty list for uploaded_files since we use session_state logic now
+                     process_data([], jenis_periode, periode, tahun)
+                 st.success("✅ Laporan berhasil dibuat!")
+                 st.rerun()
+                 
         # Clear button
         if st.button("🗑️ Clear Data", use_container_width=True):
-            st.session_state.loaded_files = []
-            st.session_state.report = None
-            st.session_state.stats = None
-            st.session_state.aggregator = DataAggregator()
-            st.session_state.investment_reports = None
-            st.session_state.investment_file = None
-            st.session_state.prev_year_investment_file = None
-            st.session_state.tw_summary = None
-            st.session_state.prev_year_tw_summary = None
+            cols_to_clear = ['nib_ref_file', 'pb_oss_ref_file', 'proyek_ref_file', 
+                             'report', 'stats', 'aggregator', 'investment_reports', 
+                             'tw_summary', 'prev_year_tw_summary']
+            for col in cols_to_clear:
+                if col in st.session_state:
+                    del st.session_state[col]
+            # Re-init basic state
+            st.session_state.loaded_files = [] # Keep for legacy compatibility if needed
+            if 'aggregator' not in st.session_state:
+                st.session_state.aggregator = DataAggregator()
             st.rerun()
-        
+            
         return jenis_periode, periode, tahun
 
 
 def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
-    """Process uploaded files and generate report."""
-    loader = DataLoader()
+    """Process uploaded reference files and generate report."""
+    loader = ReferenceDataLoader()
     aggregator = DataAggregator()
     
-    # Storage for sektor risiko data
-    all_sektor_risiko = []
+    # Initialize containers
+    report = None
+    stats = {}
     
-    # Load each file directly from memory using BytesIO
-    for file in uploaded_files:
+    # Determine months included in the period
+    months = loader.get_months_for_period(jenis_periode, periode)
+    
+    # 1. Process NIB Data (if uploaded)
+    nib_file = st.session_state.get('nib_ref_file')
+    if nib_file:
         try:
-            # Read file content into BytesIO
-            file_content = io.BytesIO(file.getvalue())
+            file_content = io.BytesIO(nib_file.getvalue())
+            nib_data = loader.load_nib(file_content, nib_file.name, year=tahun)
             
-            # Load NIB data using pandas directly from BytesIO
-            data = loader.load_from_bytes(file_content, file.name)
-            
-            # Check if this is a quarterly file
-            if data.get('is_quarterly'):
-                # Process quarterly file - has multiple months
-                file_content.seek(0)  # Reset file pointer
-                monthly_data = loader.load_quarterly_file(file_content, file.name)
+            if nib_data:
+                # Create PeriodReport structure manually
+                report = PeriodReport(
+                    period_type=jenis_periode,
+                    period_name=periode,
+                    year=tahun,
+                    months_included=months
+                )
                 
-                # Add each month's data to aggregator
-                for month, month_data in monthly_data.items():
-                    if month_data.get('nib'):
-                        aggregator.loaded_data[month] = month_data
-                        
-                # Load sektor risiko data from quarterly file sheets
-                file_content.seek(0)
-                xl = pd.ExcelFile(file_content)
-                for sheet_name in xl.sheet_names:
-                    if 'RESIKO' in sheet_name.upper() or 'RISIKO' in sheet_name.upper():
-                        df = pd.read_excel(xl, sheet_name=sheet_name, header=None)
-                        sektor_data = loader.parse_sektor_resiko_sheet(df)
-                        all_sektor_risiko.extend(sektor_data)
-            else:
-                # Regular monthly file
-                month = data.get('month')
-                if month:
-                    aggregator.loaded_data[month] = data
+                # Populate monthly totals
+                for m in months:
+                    report.monthly_totals[m] = nib_data.monthly_totals.get(m, 0)
                 
-                # Also try to load sektor risiko data
-                file_content.seek(0)  # Reset file pointer
-                xl = pd.ExcelFile(file_content)
-                for sheet_name in xl.sheet_names:
-                    if 'RESIKO' in sheet_name.upper() or 'RISIKO' in sheet_name.upper():
-                        df = pd.read_excel(xl, sheet_name=sheet_name, header=None)
-                        sektor_data = loader.parse_sektor_resiko_sheet(df)
-                        all_sektor_risiko.extend(sektor_data)
-                        break
+                # Aggregate totals
+                report.total_nib = nib_data.get_period_total(months)
+                
+                pm_totals = nib_data.get_period_by_pm_status(months)
+                report.total_pma = pm_totals.get('PMA', 0)
+                report.total_pmdn = pm_totals.get('PMDN', 0)
+                
+                skala_totals = nib_data.get_period_by_skala_usaha(months)
+                # Map various spellings if needed
+                for k, v in skala_totals.items():
+                    k_lower = k.lower()
+                    if 'mikro' in k_lower: report.total_umk += v
+                    elif 'kecil' in k_lower: report.total_umk += v
+                    elif 'menengah' in k_lower: report.total_non_umk += v
+                    elif 'besar' in k_lower: report.total_non_umk += v
+                
+                # Populate data_by_location (AggregatedNIBData)
+                # Iterate over all known locations from data
+                all_locations = set(nib_data.by_kab_kota.keys())
+                
+                for kab in all_locations:
+                    agg_data = AggregatedNIBData(kabupaten_kota=kab)
                     
+                    # Period total
+                    agg_data.grand_total = sum(nib_data.by_kab_kota[kab].get(m, 0) for m in months)
+                    
+                    # Monthly breakdown
+                    for m in months:
+                        agg_data.period_data[m] = nib_data.by_kab_kota[kab].get(m, 0)
+                    
+                    # PM breakdown for this kab/kota (using new granular data)
+                    if hasattr(nib_data, 'kab_pm_monthly') and kab in nib_data.kab_pm_monthly:
+                        for m in months:
+                            if m in nib_data.kab_pm_monthly[kab]:
+                                for pm_status, count in nib_data.kab_pm_monthly[kab][m].items():
+                                    if 'PMA' in str(pm_status).upper(): agg_data.pma_total += count
+                                    elif 'PMDN' in str(pm_status).upper(): agg_data.pmdn_total += count
+                    
+                    # Skala breakdown for this kab/kota
+                    if hasattr(nib_data, 'kab_skala_monthly') and kab in nib_data.kab_skala_monthly:
+                        for m in months:
+                            if m in nib_data.kab_skala_monthly[kab]:
+                                for skala, count in nib_data.kab_skala_monthly[kab][m].items():
+                                    s_lower = str(skala).lower()
+                                    if 'mikro' in s_lower: agg_data.usaha_mikro_total += count
+                                    elif 'kecil' in s_lower: agg_data.usaha_kecil_total += count
+                                    elif 'menengah' in s_lower: agg_data.usaha_menengah_total += count
+                                    elif 'besar' in s_lower: agg_data.usaha_besar_total += count
+                    
+                    report.data_by_location[kab] = agg_data
+                    
+                # Generate base stats
+                stats = aggregator.get_summary_stats(report)
+                
         except Exception as e:
-            st.warning(f"⚠️ Error loading {file.name}: {str(e)}")
-    
-    # Generate report based on period type
-    if jenis_periode == "Triwulan":
-        report = aggregator.aggregate_triwulan(periode, tahun)
-    elif jenis_periode == "Semester":
-        report = aggregator.aggregate_semester(periode, tahun)
-    else:
-        report = aggregator.aggregate_tahunan(tahun)
-    
-    stats = aggregator.get_summary_stats(report)
-    
-    # Aggregate sektor risiko data and add to stats
-    if all_sektor_risiko:
-        sektor_totals = {
-            'risiko_rendah': sum(d.risiko_rendah for d in all_sektor_risiko),
-            'risiko_menengah_rendah': sum(d.risiko_menengah_rendah for d in all_sektor_risiko),
-            'risiko_menengah_tinggi': sum(d.risiko_menengah_tinggi for d in all_sektor_risiko),
-            'risiko_tinggi': sum(d.risiko_tinggi for d in all_sektor_risiko),
-            'sektor_energi': sum(d.sektor_energi for d in all_sektor_risiko),
-            'sektor_kelautan': sum(d.sektor_kelautan for d in all_sektor_risiko),
-            'sektor_kesehatan': sum(d.sektor_kesehatan for d in all_sektor_risiko),
-            'sektor_komunikasi': sum(d.sektor_komunikasi for d in all_sektor_risiko),
-            'sektor_pariwisata': sum(d.sektor_pariwisata for d in all_sektor_risiko),
-            'sektor_perhubungan': sum(d.sektor_perhubungan for d in all_sektor_risiko),
-            'sektor_perindustrian': sum(d.sektor_perindustrian for d in all_sektor_risiko),
-            'sektor_pertanian': sum(d.sektor_pertanian for d in all_sektor_risiko),
-            'total': sum(d.total for d in all_sektor_risiko),
-        }
-        stats['sektor_risiko'] = sektor_totals
-    
-    # Process investment file if available
-    if st.session_state.investment_file:
-        try:
-            inv_file = st.session_state.investment_file
-            inv_content = io.BytesIO(inv_file.getvalue())
-            investment_reports = loader.load_realisasi_investasi(inv_content, inv_file.name)
-            st.session_state.investment_reports = investment_reports
+            st.error(f"Error loading NIB file: {str(e)}")
+            print(f"Detailed error NIB: {e}")
             
-            # Also parse TW summary for project comparison charts
-            inv_content.seek(0)
-            tw_summary = loader.parse_investment_summary(inv_content, inv_file.name)
-            st.session_state.tw_summary = tw_summary
-        except Exception as e:
-            print(f"Error loading investment data: {e}")
-            st.session_state.investment_reports = None
-            st.session_state.tw_summary = None
-    
-    # Process previous year investment file for Y-o-Y comparison
-    if st.session_state.prev_year_investment_file:
+    # 2. Process PB OSS Data (if uploaded)
+    pb_file = st.session_state.get('pb_oss_ref_file')
+    if pb_file:
         try:
-            prev_file = st.session_state.prev_year_investment_file
-            prev_content = io.BytesIO(prev_file.getvalue())
-            prev_tw_summary = loader.parse_investment_summary(prev_content, prev_file.name)
-            st.session_state.prev_year_tw_summary = prev_tw_summary
+            file_content = io.BytesIO(pb_file.getvalue())
+            pb_data = loader.load_pb_oss(file_content, pb_file.name, year=tahun)
+            
+            if pb_data:
+                # Get risk and sector distribution for selected period
+                risk_dist = pb_data.get_period_risk(months)
+                sector_dist = pb_data.get_period_sector(months)
+                
+                # Map to stats structure expected by charts
+                sektor_totals = {
+                    'risiko_rendah': risk_dist.get('Rendah', 0),
+                    'risiko_menengah_rendah': risk_dist.get('Menengah Rendah', 0),
+                    'risiko_menengah_tinggi': risk_dist.get('Menengah Tinggi', 0),
+                    'risiko_tinggi': risk_dist.get('Tinggi', 0),
+                    'total': sum(risk_dist.values())
+                }
+                
+                # Add sector specific keys if available (simple mapping)
+                for sector, count in sector_dist.items():
+                    # Sanitize key for convenience
+                    key = 'sektor_' + sector.lower().split()[0] # e.g. sektor_pertanian
+                    sektor_totals[key] = count
+                
+                stats['sektor_risiko'] = sektor_totals
+                
         except Exception as e:
-            print(f"Error loading previous year data: {e}")
-            st.session_state.prev_year_tw_summary = None
-    
+            st.warning(f"Error loading PB OSS file: {str(e)}")
+            
+    # 3. Process PROYEK Data (if uploaded)
+    proyek_file = st.session_state.get('proyek_ref_file')
+    if proyek_file:
+        try:
+            file_content = io.BytesIO(proyek_file.getvalue())
+            proyek_data = loader.load_proyek(file_content, proyek_file.name, year=tahun)
+            
+            if proyek_data:
+                investment_reports = {} # Dict[periode_name, InvestmentReport]
+                tw_summary = {} # Dict[triwulan, TWSummary] -> needed for projections
+                
+                # Create InvestmentReport for the CURRENT period
+                current_inv_report = InvestmentReport(
+                    triwulan=periode,
+                    year=tahun
+                )
+                
+                # Populate data
+                current_inv_report.pma_total = proyek_data.get_period_pma(months)
+                current_inv_report.pmdn_total = proyek_data.get_period_pmdn(months)
+                current_inv_report.pma_tki = proyek_data.get_period_tki(months) # Simplified labor assignment
+                current_inv_report.pma_tka = proyek_data.get_period_tka(months)
+                current_inv_report.pma_proyek = proyek_data.get_period_projects(months) # Simplified
+                
+                # Populate Wilayah breakdown (InvestmentData objects)
+                wilayah_data = proyek_data.get_period_by_wilayah(months)
+                pma_wil_list = []
+                
+                for wil, inv in wilayah_data.items():
+                     # Create generic InvestmentData
+                     inv_obj = InvestmentData(name=wil, jumlah_rp=inv)
+                     # Add to PMA list (temporary hack until granular split available)
+                     pma_wil_list.append(inv_obj)
+                     
+                current_inv_report.pma_by_wilayah = pma_wil_list
+                # current_inv_report.pmdn_by_wilayah remains empty or we split logic
+                
+                investment_reports[periode] = current_inv_report
+                st.session_state.investment_reports = investment_reports
+                
+                # Project projection (from TW summary)
+                # Create dummy summary for sections using it
+                summary_obj = TWSummary(triwulan=periode, year=tahun)
+                summary_obj.proyek = proyek_data.get_period_projects(months)
+                summary_obj.total_rp = current_inv_report.total_investasi
+                tw_summary[periode] = summary_obj
+                st.session_state.tw_summary = tw_summary
+                
+        except Exception as e:
+            st.warning(f"Error loading PROYEK file: {str(e)}")
+            print(f"Detailed Proyek error: {e}")
+
+    # Set session state
     st.session_state.report = report
     st.session_state.stats = stats
     st.session_state.aggregator = aggregator
