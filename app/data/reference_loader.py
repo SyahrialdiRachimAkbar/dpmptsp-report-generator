@@ -32,6 +32,9 @@ class NIBReferenceData:
     by_kab_kota: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Kab → Month → count
     by_pm_status: Dict[str, Dict[str, int]] = field(default_factory=dict)  # PM → Month → count
     by_skala_usaha: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Skala → Month → count
+    # Detailed breakdowns for cross-tabulation (Kab/Kota → Month → Category → Count)
+    kab_pm_monthly: Dict[str, Dict[str, Dict[str, int]]] = field(default_factory=dict)
+    kab_skala_monthly: Dict[str, Dict[str, Dict[str, int]]] = field(default_factory=dict)
     
     def get_period_total(self, months: List[str]) -> int:
         """Get total NIB for specified months."""

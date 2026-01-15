@@ -787,9 +787,13 @@ def render_sidebar():
              else:
                  with st.spinner("Memproses data..."):
                      # Pass empty list for uploaded_files since we use session_state logic now
-                     process_data([], jenis_periode, periode, tahun)
-                 st.success("✅ Laporan berhasil dibuat!")
-                 st.rerun()
+                     success = process_data([], jenis_periode, periode, tahun)
+                 
+                 if success:
+                     st.success("✅ Laporan berhasil dibuat!")
+                     st.rerun()
+                 else:
+                     st.error("❌ Gagal membuat laporan. Periksa pesan error di atas.")
                  
         # Clear button
         if st.button("🗑️ Clear Data", use_container_width=True):
@@ -986,6 +990,8 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     st.session_state.report = report
     st.session_state.stats = stats
     st.session_state.aggregator = aggregator
+    
+    return report is not None
 
 
 def render_metrics(stats: dict):
