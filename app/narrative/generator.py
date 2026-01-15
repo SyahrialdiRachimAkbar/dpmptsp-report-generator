@@ -480,4 +480,159 @@ DPMPTSP Provinsi Lampung terus berkomitmen untuk meningkatkan pelayanan perizina
 Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikator penting dalam perencanaan kebijakan investasi ke depan."""
         
         return text
+    
+    # === Per-Chart Narrative Methods ===
+    
+    def generate_wilayah_narrative(self, investment_data, investment_type: str = "PMA") -> str:
+        """Generate narrative for investment by wilayah chart."""
+        if not investment_data:
+            return ""
+        
+        # Sort by value
+        sorted_data = sorted(investment_data, key=lambda x: x.jumlah_rp, reverse=True)
+        if not sorted_data:
+            return ""
+        
+        top_wilayah = sorted_data[0]
+        total = sum(d.jumlah_rp for d in sorted_data)
+        top_pct = (top_wilayah.jumlah_rp / total * 100) if total > 0 else 0
+        
+        # Format value
+        val = top_wilayah.jumlah_rp
+        if val >= 1e12:
+            val_str = f"Rp {val/1e12:.2f} Triliun"
+        elif val >= 1e9:
+            val_str = f"Rp {val/1e9:.1f} Miliar"
+        else:
+            val_str = f"Rp {val/1e6:.1f} Juta"
+        
+        text = f"Investasi {investment_type} tertinggi berada di wilayah {top_wilayah.name} dengan nilai {val_str} ({top_pct:.1f}% dari total)."
+        
+        # Add second if exists
+        if len(sorted_data) > 1:
+            second = sorted_data[1]
+            second_pct = (second.jumlah_rp / total * 100) if total > 0 else 0
+            text += f" Posisi kedua ditempati oleh {second.name} ({second_pct:.1f}%)."
+        
+        return text
+    
+    def generate_pma_pmdn_comparison_narrative(self, pma_total: float, pmdn_total: float) -> str:
+        """Generate narrative for PMA vs PMDN comparison chart."""
+        total = pma_total + pmdn_total
+        if total <= 0:
+            return ""
+        
+        pma_pct = (pma_total / total * 100)
+        pmdn_pct = (pmdn_total / total * 100)
+        
+        if pmdn_total > pma_total:
+            dominant = "PMDN"
+            dominant_pct = pmdn_pct
+            ratio = pmdn_total / pma_total if pma_total > 0 else 0
+            insight = f"Investasi domestik {ratio:.1f}x lebih besar dari investasi asing, menunjukkan kuatnya partisipasi pengusaha dalam negeri."
+        else:
+            dominant = "PMA"
+            dominant_pct = pma_pct
+            ratio = pma_total / pmdn_total if pmdn_total > 0 else 0
+            insight = f"Investasi asing {ratio:.1f}x lebih besar dari domestik, menunjukkan daya tarik daerah bagi investor luar negeri."
+        
+        return f"Berdasarkan proporsi, {dominant} mendominasi dengan {dominant_pct:.1f}% dari total investasi. {insight}"
+    
+    def generate_labor_narrative(self, tki: int, tka: int) -> str:
+        """Generate narrative for labor absorption chart."""
+        total = tki + tka
+        if total <= 0:
+            return ""
+        
+        tki_pct = (tki / total * 100)
+        tka_pct = (tka / total * 100)
+        
+        tki_formatted = f"{tki:,}".replace(",", ".")
+        tka_formatted = f"{tka:,}".replace(",", ".")
+        
+        text = f"Penyerapan tenaga kerja mencapai {tki_formatted} TKI ({tki_pct:.1f}%) dan {tka_formatted} TKA ({tka_pct:.1f}%)."
+        
+        if tki > tka * 10:
+            text += " Dominasi TKI menunjukkan investasi berhasil membuka lapangan kerja bagi tenaga lokal."
+        elif tka > tki:
+            text += " Tingginya proporsi TKA mengindikasikan kebutuhan tenaga ahli dari luar negeri."
+        
+        return text
+    
+    def generate_tw_comparison_narrative(self, investment_reports: dict) -> str:
+        """Generate narrative for TW comparison chart."""
+        if not investment_reports or len(investment_reports) < 2:
+            return ""
+        
+        # Get ordered TW data
+        tw_order = ["TW I", "TW II", "TW III", "TW IV"]
+        data = []
+        for tw in tw_order:
+            if tw in investment_reports:
+                report = investment_reports[tw]
+                total = report.pma_total + report.pmdn_total
+                data.append((tw, total))
+        
+        if len(data) < 2:
+            return ""
+        
+        # Find trend
+        first_val = data[0][1]
+        last_val = data[-1][1]
+        
+        if last_val > first_val:
+            trend = "tren peningkatan"
+            change = ((last_val - first_val) / first_val * 100) if first_val > 0 else 0
+            insight = f"meningkat {change:.1f}% dari {data[0][0]} ke {data[-1][0]}"
+        elif last_val < first_val:
+            trend = "tren penurunan"
+            change = ((first_val - last_val) / first_val * 100) if first_val > 0 else 0
+            insight = f"menurun {change:.1f}% dari {data[0][0]} ke {data[-1][0]}"
+        else:
+            trend = "stabil"
+            insight = "relatif stabil sepanjang periode"
+        
+        # Find peak
+        peak_tw, peak_val = max(data, key=lambda x: x[1])
+        
+        return f"Perbandingan antar Triwulan menunjukkan {trend}, {insight}. Investasi tertinggi tercatat pada {peak_tw}."
+    
+    def generate_qoq_narrative(self, current_tw: str, current_proyek: int, prev_tw: str, prev_proyek: int) -> str:
+        """Generate narrative for Q-o-Q comparison chart."""
+        if prev_proyek <= 0:
+            return ""
+        
+        change = ((current_proyek - prev_proyek) / prev_proyek * 100)
+        
+        curr_formatted = f"{current_proyek:,}".replace(",", ".")
+        prev_formatted = f"{prev_proyek:,}".replace(",", ".")
+        
+        if change > 0:
+            trend = "peningkatan"
+            insight = "menunjukkan pertumbuhan aktivitas investasi"
+        else:
+            trend = "penurunan"
+            insight = "perlu evaluasi faktor-faktor yang mempengaruhi"
+        
+        return f"Secara Q-o-Q, jumlah proyek mengalami {trend} {abs(change):.1f}% dari {prev_tw} ({prev_formatted}) ke {current_tw} ({curr_formatted}). Hal ini {insight}."
+    
+    def generate_yoy_narrative(self, tw_name: str, current_year: int, current_proyek: int, 
+                                prev_year: int, prev_proyek: int) -> str:
+        """Generate narrative for Y-o-Y comparison chart."""
+        if prev_proyek <= 0:
+            return ""
+        
+        change = ((current_proyek - prev_proyek) / prev_proyek * 100)
+        
+        curr_formatted = f"{current_proyek:,}".replace(",", ".")
+        prev_formatted = f"{prev_proyek:,}".replace(",", ".")
+        
+        if change > 0:
+            trend = "pertumbuhan"
+            insight = "menunjukkan perbaikan iklim investasi dari tahun ke tahun"
+        else:
+            trend = "penurunan"
+            insight = "perlu strategi untuk meningkatkan daya tarik investasi"
+        
+        return f"Perbandingan Y-o-Y menunjukkan {trend} {abs(change):.1f}% untuk {tw_name} ({prev_year}: {prev_formatted} vs {current_year}: {curr_formatted}). {insight.capitalize()}."
 

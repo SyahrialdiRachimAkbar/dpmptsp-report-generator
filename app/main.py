@@ -1289,6 +1289,23 @@ def render_report(report, stats: dict):
                     )
                     st.plotly_chart(fig_inv_wil_pmdn, use_container_width=True)
             
+            # Narrative for Wilayah charts
+            col1, col2 = st.columns(2)
+            with col1:
+                if current_investment.pma_by_wilayah:
+                    pma_wilayah_narr = narrative_gen.generate_wilayah_narrative(
+                        current_investment.pma_by_wilayah, "PMA"
+                    )
+                    if pma_wilayah_narr:
+                        st.markdown(f'<div class="narrative-box">{pma_wilayah_narr}</div>', unsafe_allow_html=True)
+            with col2:
+                if current_investment.pmdn_by_wilayah:
+                    pmdn_wilayah_narr = narrative_gen.generate_wilayah_narrative(
+                        current_investment.pmdn_by_wilayah, "PMDN"
+                    )
+                    if pmdn_wilayah_narr:
+                        st.markdown(f'<div class="narrative-box">{pmdn_wilayah_narr}</div>', unsafe_allow_html=True)
+            
             st.markdown('<div class="section-title">2.2 Perbandingan PMA vs PMDN</div>', 
                         unsafe_allow_html=True)
             
@@ -1310,12 +1327,34 @@ def render_report(report, stats: dict):
                 )
                 st.plotly_chart(fig_labor, use_container_width=True)
             
+            # Narratives for PMA/PMDN and Labor charts
+            col1, col2 = st.columns(2)
+            with col1:
+                pma_pmdn_narr = narrative_gen.generate_pma_pmdn_comparison_narrative(
+                    current_investment.pma_total,
+                    current_investment.pmdn_total
+                )
+                if pma_pmdn_narr:
+                    st.markdown(f'<div class="narrative-box">{pma_pmdn_narr}</div>', unsafe_allow_html=True)
+            with col2:
+                labor_narr = narrative_gen.generate_labor_narrative(
+                    current_investment.total_tki,
+                    current_investment.total_tka
+                )
+                if labor_narr:
+                    st.markdown(f'<div class="narrative-box">{labor_narr}</div>', unsafe_allow_html=True)
+            
             # TW Comparison chart (if multiple TW data available)
             if len(investment_reports) > 1:
                 st.markdown('<div class="section-title">2.3 Perbandingan Antar Triwulan</div>', 
                             unsafe_allow_html=True)
                 fig_tw_comp = chart_gen.create_investment_tw_comparison_chart(investment_reports)
                 st.plotly_chart(fig_tw_comp, use_container_width=True)
+                
+                # Narrative for TW comparison
+                tw_comp_narr = narrative_gen.generate_tw_comparison_narrative(investment_reports)
+                if tw_comp_narr:
+                    st.markdown(f'<div class="narrative-box">{tw_comp_narr}</div>', unsafe_allow_html=True)
             
             # Investment Narrative Interpretation
             st.markdown('<div class="section-title">2.4 Interpretasi Data Investasi</div>', 
@@ -1422,6 +1461,16 @@ def render_report(report, stats: dict):
                         previous_data={"pma": prev_pma, "pmdn": prev_pmdn}
                     )
                     st.plotly_chart(fig_qoq, use_container_width=True)
+                    
+                    # Q-o-Q Narrative
+                    qoq_narr = narrative_gen.generate_qoq_narrative(
+                        current_tw=periode_name,
+                        current_proyek=current_summary.proyek,
+                        prev_tw=previous_tw,
+                        prev_proyek=previous_summary.proyek
+                    )
+                    if qoq_narr:
+                        st.markdown(f'<div class="narrative-box">{qoq_narr}</div>', unsafe_allow_html=True)
                 else:
                     st.info(f"Data {previous_tw} tidak tersedia untuk perbandingan Q-o-Q. Data yang tersedia: {available_tws}")
             else:
@@ -1454,6 +1503,17 @@ def render_report(report, stats: dict):
                         previous_data={"pma": prev_year_pma, "pmdn": prev_year_pmdn}
                     )
                     st.plotly_chart(fig_yoy, use_container_width=True)
+                    
+                    # Y-o-Y Narrative
+                    yoy_narr = narrative_gen.generate_yoy_narrative(
+                        tw_name=periode_name,
+                        current_year=current_summary.year,
+                        current_proyek=current_summary.proyek,
+                        prev_year=prev_year_tw.year,
+                        prev_proyek=prev_year_tw.proyek
+                    )
+                    if yoy_narr:
+                        st.markdown(f'<div class="narrative-box">{yoy_narr}</div>', unsafe_allow_html=True)
             
             # Project Narrative Interpretation
             st.markdown('<div class="section-title">3.4 Interpretasi Data Proyek</div>', 
