@@ -1322,7 +1322,7 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             tw_summary_data = st.session_state.get('tw_summary', None)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
-            investment_narrative = narrator.generate_investment_narrative(
+            investment_narrative = narrative_gen.generate_investment_narrative(
                 report=report,
                 current_investment=current_investment,
                 tw_summary=tw_summary_data,
@@ -1459,7 +1459,7 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">3.4 Interpretasi Data Proyek</div>', 
                         unsafe_allow_html=True)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
-            project_narrative = narrator.generate_project_narrative(
+            project_narrative = narrative_gen.generate_project_narrative(
                 report=report,
                 current_summary=current_summary,
                 tw_summary=tw_summary,
