@@ -1508,20 +1508,6 @@ def render_report(report, stats: dict):
                 tw_comp_narr = narrative_gen.generate_tw_comparison_narrative(investment_reports)
                 if tw_comp_narr:
                     st.markdown(f'<div class="narrative-box">{tw_comp_narr}</div>', unsafe_allow_html=True)
-            
-            # Investment Narrative Interpretation
-            st.markdown('<div class="section-title">Interpretasi Data Investasi</div>', 
-                        unsafe_allow_html=True)
-            tw_summary_data = st.session_state.get('tw_summary', None)
-            prev_year_data = st.session_state.get('prev_year_tw_summary', None)
-            investment_narrative = narrative_gen.generate_investment_narrative(
-                report=report,
-                current_investment=current_investment,
-                tw_summary=tw_summary_data,
-                prev_year_summary=prev_year_data
-            )
-            st.markdown(f'<div class="narrative-box">{investment_narrative}</div>', 
-                        unsafe_allow_html=True)
         else:
             st.info(f"Data investasi untuk {periode_name} tidak tersedia dalam file yang diupload.")
     
