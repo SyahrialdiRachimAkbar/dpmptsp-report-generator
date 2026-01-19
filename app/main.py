@@ -1241,9 +1241,23 @@ def render_report(report, stats: dict):
                 unsafe_allow_html=True)
     
     # === Load Previous Year Data for Comparison ===
+    # === Load Previous Year Data for Comparison ===
+    # We need a new aggregator instance here to handle the refined stats calculations
+    current_nib_file = st.session_state.get('nib_ref_file')
     prev_nib_file = st.session_state.get('nib_prev_ref_file')
+    
+    # Initialize separate aggregator for on-the-fly comparisons if needed
+    # (Note: we could also pass this from process_data, but recreating it ensures we have exact file state)
+    aggregator = DataAggregator()
+    
+    files_to_load = []
+    if current_nib_file:
+         files_to_load.append(current_nib_file)
     if prev_nib_file:
-         aggregator.load_files([prev_nib_file])
+         files_to_load.append(prev_nib_file)
+         
+    if files_to_load:
+         aggregator.load_files(files_to_load)
 
     # === comparison logic ===
     # 1. Get current report for the selected period
