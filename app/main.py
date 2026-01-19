@@ -1939,49 +1939,79 @@ def render_report(report, stats: dict):
                 import plotly.graph_objects as go
                 import pandas as pd
                 
-                # Sort and get top entries for chart (show top 20)
+                # Sort all entries by total count
                 sorted_kew = dict(sorted(kew_data.items(), key=lambda x: x[1], reverse=True))
                 top_kew = dict(list(sorted_kew.items())[:20])  # Top 20 for chart
+                total = sum(kew_data.values())
+                sorted_items = sorted(kew_data.items(), key=lambda x: x[1], reverse=True)
                 
-                col1, col2 = st.columns([1, 1.5])
-                with col1:
-                    # Horizontal bar chart for top Kewenangan entries
-                    chart_height = max(400, len(top_kew) * 25)  # Dynamic height
-                    fig = go.Figure(data=[go.Bar(
-                        x=list(top_kew.values()), 
-                        y=list(top_kew.keys()), 
-                        orientation='h',
-                        marker_color='#3B82F6',
-                        text=[f'{v:,}' for v in top_kew.values()],
-                        textposition='outside'
-                    )])
-                    fig.update_layout(
-                        title=f'Jumlah Perizinan Berdasarkan Kewenangan (Top 20)<br>Periode {report.period_name} Tahun {report.year}',
-                        template='plotly_dark', 
-                        height=chart_height,
-                        yaxis={'categoryorder': 'total ascending'},
-                        margin=dict(l=10)
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                # Build monthly breakdown for each kewenangan
+                kew_monthly = {}
+                for month in months:
+                    month_data = pb_data.monthly_kewenangan.get(month, {})
+                    for kew, count in month_data.items():
+                        if kew not in kew_monthly:
+                            kew_monthly[kew] = {m: 0 for m in months}
+                        kew_monthly[kew][month] = count
                 
-                with col2:
-                    # Full detailed table with all entries
-                    total = sum(kew_data.values())
-                    sorted_items = sorted(kew_data.items(), key=lambda x: x[1], reverse=True)
-                    
-                    # Use pandas dataframe for reliable table display
-                    import pandas as pd
-                    kew_df = pd.DataFrame({
-                        'No': range(1, len(sorted_items) + 1),
-                        'Kewenangan': [k for k, v in sorted_items],
-                        'Jumlah': [v for k, v in sorted_items],
-                        'Persentase': [f"{v/total*100:.2f}%" for k, v in sorted_items]
-                    })
-                    
-                    st.markdown(f'**Total: {len(sorted_items)} Kewenangan | {total:,} Perizinan**')
-                    st.dataframe(kew_df, use_container_width=True, hide_index=True, height=450)
+                # ========== HORIZONTAL BAR CHART (Full Width) ==========
+                chart_height = max(500, len(top_kew) * 28)
+                fig = go.Figure(data=[go.Bar(
+                    x=list(top_kew.values()), 
+                    y=list(top_kew.keys()), 
+                    orientation='h',
+                    marker=dict(
+                        color=list(top_kew.values()),
+                        colorscale=[[0, '#60A5FA'], [0.5, '#3B82F6'], [1, '#1E40AF']],
+                        showscale=False
+                    ),
+                    text=[f'{v:,}' for v in top_kew.values()],
+                    textposition='outside',
+                    textfont=dict(size=11)
+                )])
+                fig.update_layout(
+                    title=dict(
+                        text=f'<b>JUMLAH PERIZINAN BERUSAHA BERBASIS RISIKO</b><br>PERIODE {report.period_name.upper()} TAHUN {report.year} BERDASARKAN KEWENANGAN',
+                        font=dict(size=14)
+                    ),
+                    template='plotly_dark', 
+                    height=chart_height,
+                    yaxis=dict(categoryorder='total ascending', tickfont=dict(size=10)),
+                    xaxis=dict(title='Jumlah Perizinan', tickformat=','),
+                    margin=dict(l=10, r=60, t=80, b=40),
+                    showlegend=False
+                )
+                st.plotly_chart(fig, use_container_width=True)
                 
-                # Narrative interpretation
+                # ========== DATA TABLE WITH MONTHLY BREAKDOWN ==========
+                st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi: {len(sorted_items)} Kewenangan | Total: {total:,} Perizinan</b></div>', unsafe_allow_html=True)
+                
+                # Build DataFrame with monthly columns
+                table_data = []
+                for idx, (kew, count) in enumerate(sorted_items, 1):
+                    row = {'No': idx, 'Kewenangan': kew}
+                    # Add monthly columns
+                    for month in months:
+                        row[month] = kew_monthly.get(kew, {}).get(month, 0)
+                    row['JUMLAH'] = count
+                    table_data.append(row)
+                
+                kew_df = pd.DataFrame(table_data)
+                
+                # Display with styled DataFrame
+                st.dataframe(
+                    kew_df, 
+                    use_container_width=True, 
+                    hide_index=True, 
+                    height=min(500, len(sorted_items) * 35 + 40),
+                    column_config={
+                        'No': st.column_config.NumberColumn('NO', width='small'),
+                        'Kewenangan': st.column_config.TextColumn('KEWENANGAN', width='large'),
+                        'JUMLAH': st.column_config.NumberColumn('JUMLAH', format='%d')
+                    }
+                )
+                
+                # ========== NARRATIVE INTERPRETATION ==========
                 top_3 = sorted_items[:3] if len(sorted_items) >= 3 else sorted_items
                 narrative = f"""
                 <b>Rekapitulasi Perizinan Berusaha Berbasis Risiko Berdasarkan Kewenangan</b> di Provinsi Lampung 
@@ -1989,9 +2019,9 @@ def render_report(report, stats: dict):
                 kewenangan tertinggi adalah dari <b>{top_3[0][0]}</b> berjumlah <b>{top_3[0][1]:,}</b> perizinan
                 """
                 if len(top_3) > 1:
-                    narrative += f", diikuti <b>{top_3[1][0]}</b> berjumlah <b>{top_3[1][1]:,}</b>"
+                    narrative += f", serta <b>{top_3[1][0]}</b> berjumlah <b>{top_3[1][1]:,}</b>"
                 if len(top_3) > 2:
-                    narrative += f", dan <b>{top_3[2][0]}</b> berjumlah <b>{top_3[2][1]:,}</b>"
+                    narrative += f" dan <b>{top_3[2][0]}</b> berjumlah <b>{top_3[2][1]:,}</b>"
                 narrative += "."
                 
                 st.markdown(f'<div class="narrative-box">{narrative}</div>', unsafe_allow_html=True)
