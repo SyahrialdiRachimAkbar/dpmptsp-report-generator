@@ -1755,6 +1755,13 @@ def render_report(report, stats: dict):
         else:
             st.info(f"Data ringkasan proyek untuk {periode_name} tidak tersedia.")
     
+    import io
+    @st.cache_data(ttl=3600)
+    def _cached_load_pb_oss_v2(file_bytes, filename, year):
+        from app.data.reference_loader import ReferenceDataLoader
+        loader = ReferenceDataLoader()
+        return loader.load_pb_oss(io.BytesIO(file_bytes), filename, year)
+
     # ===========================================
     # Section 3: Perizinan Berusaha Berbasis Risiko (PB OSS data)
     # ===========================================
@@ -1764,7 +1771,7 @@ def render_report(report, stats: dict):
                     unsafe_allow_html=True)
         
         # Load PB OSS data using cached loader
-        pb_data = _cached_load_pb_oss(pb_oss_file.getvalue(), pb_oss_file.name, report.year)
+        pb_data = _cached_load_pb_oss_v2(pb_oss_file.getvalue(), pb_oss_file.name, report.year)
         
         if pb_data:
             from app.data.reference_loader import ReferenceDataLoader
