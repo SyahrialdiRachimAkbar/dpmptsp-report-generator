@@ -68,6 +68,12 @@ class PBOSSReferenceData:
     year: int
     monthly_risk: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Risk → count
     monthly_sector: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Sector → count
+    monthly_by_kab_kota: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Kab/Kota → count
+    monthly_status_pm: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Status PM → count
+    monthly_jenis_perizinan: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Jenis → count
+    monthly_status_perizinan: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Status → count
+    monthly_kewenangan: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Kewenangan → count
+    monthly_permits: Dict[str, int] = field(default_factory=dict)  # Month → permit count
     total_permits: int = 0
     
     def get_period_risk(self, months: List[str]) -> Dict[str, int]:
@@ -87,6 +93,55 @@ class PBOSSReferenceData:
                 for sector, count in self.monthly_sector[month].items():
                     result[sector] = result.get(sector, 0) + count
         return result
+    
+    def get_period_by_kab_kota(self, months: List[str]) -> Dict[str, int]:
+        """Get permits by Kab/Kota for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_by_kab_kota:
+                for kab, count in self.monthly_by_kab_kota[month].items():
+                    result[kab] = result.get(kab, 0) + count
+        return result
+    
+    def get_period_status_pm(self, months: List[str]) -> Dict[str, int]:
+        """Get Status PM distribution for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_status_pm:
+                for status, count in self.monthly_status_pm[month].items():
+                    result[status] = result.get(status, 0) + count
+        return result
+    
+    def get_period_jenis_perizinan(self, months: List[str]) -> Dict[str, int]:
+        """Get Jenis Perizinan distribution for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_jenis_perizinan:
+                for jenis, count in self.monthly_jenis_perizinan[month].items():
+                    result[jenis] = result.get(jenis, 0) + count
+        return result
+    
+    def get_period_status_perizinan(self, months: List[str]) -> Dict[str, int]:
+        """Get Status Perizinan distribution for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_status_perizinan:
+                for status, count in self.monthly_status_perizinan[month].items():
+                    result[status] = result.get(status, 0) + count
+        return result
+    
+    def get_period_kewenangan(self, months: List[str]) -> Dict[str, int]:
+        """Get Kewenangan distribution for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_kewenangan:
+                for kew, count in self.monthly_kewenangan[month].items():
+                    result[kew] = result.get(kew, 0) + count
+        return result
+    
+    def get_period_permits(self, months: List[str]) -> int:
+        """Get total permits for specified months."""
+        return sum(self.monthly_permits.get(m, 0) for m in months)
 
 
 @dataclass
@@ -104,6 +159,8 @@ class ProyekReferenceData:
     monthly_pmdn_projects: Dict[str, int] = field(default_factory=dict)  # Month → PMDN project count
     monthly_by_wilayah: Dict[str, Dict[str, float]] = field(default_factory=dict)  # Month → Wilayah → investment
     monthly_by_skala_usaha: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Skala → project count
+    monthly_labor_by_wilayah: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Wilayah → labor count (TKI+TKA)
+    monthly_projects_by_wilayah: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Wilayah → project count
     
     def get_period_investment(self, months: List[str]) -> float:
         """Get total investment for specified months."""
@@ -153,6 +210,24 @@ class ProyekReferenceData:
             if month in self.monthly_by_skala_usaha:
                 for skala, count in self.monthly_by_skala_usaha[month].items():
                     result[skala] = result.get(skala, 0) + count
+        return result
+    
+    def get_period_labor_by_wilayah(self, months: List[str]) -> Dict[str, int]:
+        """Get total labor (TKI+TKA) by wilayah for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_labor_by_wilayah:
+                for wilayah, count in self.monthly_labor_by_wilayah[month].items():
+                    result[wilayah] = result.get(wilayah, 0) + count
+        return result
+    
+    def get_period_projects_by_wilayah(self, months: List[str]) -> Dict[str, int]:
+        """Get project count by wilayah for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_projects_by_wilayah:
+                for wilayah, count in self.monthly_projects_by_wilayah[month].items():
+                    result[wilayah] = result.get(wilayah, 0) + count
         return result
 
 
@@ -465,17 +540,42 @@ class ReferenceDataLoader:
             
             result = PBOSSReferenceData(year=year)
             
-            # Filter by Kewenangan = Gubernur
+            # Find additional columns for new breakdowns
+            kab_kota_col = self._find_column(df, ['kab_kota', 'kab kota', 'kabupaten', 'kota'])
+            status_pm_col = self._find_column(df, ['status pm', 'status_pm'])
+            jenis_perizinan_col = self._find_column(df, ['uraian_jenis_perizinan', 'jenis_perizinan', 'jenis perizinan'])
+            status_perizinan_col = self._find_column(df, ['status perizinan', 'status_perizinan'])
             kewenangan_col = self._find_column(df, ['kewenangan'])
+            
+            # First, process kewenangan from FULL unfiltered data for 3.7
+            if kewenangan_col:
+                for month in NAMA_BULAN:
+                    month_df_full = df[df['_month'] == month]
+                    if not month_df_full.empty:
+                        kew_counts = month_df_full[kewenangan_col].value_counts()
+                        result.monthly_kewenangan[month] = dict(kew_counts)
+            
+            # Process status_perizinan from FULL unfiltered data for 3.6
+            if status_perizinan_col:
+                for month in NAMA_BULAN:
+                    month_df_full = df[df['_month'] == month]
+                    if not month_df_full.empty:
+                        status_counts = month_df_full[status_perizinan_col].value_counts()
+                        result.monthly_status_perizinan[month] = dict(status_counts)
+            
+            # Now apply Gubernur filter for remaining breakdowns
             if kewenangan_col:
                 df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
             
-            # Process per month
+            # Process per month (Gubernur-filtered data)
             for month in NAMA_BULAN:
                 month_df = df[df['_month'] == month]
                 
                 if month_df.empty:
                     continue
+                
+                # Count permits for this month
+                result.monthly_permits[month] = len(month_df)
                 
                 # Count permits by risk level
                 if risk_col:
@@ -491,8 +591,23 @@ class ReferenceDataLoader:
                 if sector_col:
                     sector_counts = month_df[sector_col].value_counts().head(10)  # Top 10 sectors
                     result.monthly_sector[month] = dict(sector_counts)
+                
+                # Count permits by Kab/Kota
+                if kab_kota_col:
+                    kab_counts = month_df[kab_kota_col].value_counts()
+                    result.monthly_by_kab_kota[month] = dict(kab_counts)
+                
+                # Count permits by Status PM
+                if status_pm_col:
+                    pm_counts = month_df[status_pm_col].value_counts()
+                    result.monthly_status_pm[month] = dict(pm_counts)
+                
+                # Count permits by Jenis Perizinan
+                if jenis_perizinan_col:
+                    jenis_counts = month_df[jenis_perizinan_col].value_counts().head(15)
+                    result.monthly_jenis_perizinan[month] = dict(jenis_counts)
             
-            # Calculate total permits
+            # Calculate total permits (from Gubernur-filtered data)
             result.total_permits = len(df)
             
             return result
@@ -588,6 +703,21 @@ class ReferenceDataLoader:
                 if skala_col:
                     skala_counts = month_df[skala_col].value_counts()
                     result.monthly_by_skala_usaha[month] = dict(skala_counts)
+                
+                # Labor by Wilayah (TKI+TKA combined per wilayah)
+                if wilayah_col and (tki_col or tka_col):
+                    labor_by_wil = {}
+                    for wil in month_df[wilayah_col].dropna().unique():
+                        wil_df = month_df[month_df[wilayah_col] == wil]
+                        tki_sum = int(wil_df[tki_col].sum()) if tki_col else 0
+                        tka_sum = int(wil_df[tka_col].fillna(0).sum()) if tka_col else 0
+                        labor_by_wil[wil] = tki_sum + tka_sum
+                    result.monthly_labor_by_wilayah[month] = labor_by_wil
+                
+                # Project count by Wilayah
+                if wilayah_col:
+                    proj_counts = month_df[wilayah_col].value_counts()
+                    result.monthly_projects_by_wilayah[month] = dict(proj_counts)
             
             return result
             
