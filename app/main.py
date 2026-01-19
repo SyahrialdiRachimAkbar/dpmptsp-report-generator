@@ -1939,23 +1939,56 @@ def render_report(report, stats: dict):
                 import plotly.graph_objects as go
                 import pandas as pd
                 
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns([1, 1.5])
                 with col1:
-                    # Pie chart for Kewenangan
-                    fig = go.Figure(data=[go.Pie(labels=list(kew_data.keys()), values=list(kew_data.values()), hole=0.4)])
-                    fig.update_layout(title='Perizinan per Kewenangan', template='plotly_dark', height=400)
+                    # Horizontal bar chart for Kewenangan
+                    sorted_kew = dict(sorted(kew_data.items(), key=lambda x: x[1], reverse=True))
+                    fig = go.Figure(data=[go.Bar(
+                        x=list(sorted_kew.values()), 
+                        y=list(sorted_kew.keys()), 
+                        orientation='h',
+                        marker_color=['#22C55E', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444'][:len(sorted_kew)],
+                        text=[f'{v:,}' for v in sorted_kew.values()],
+                        textposition='outside'
+                    )])
+                    fig.update_layout(
+                        title=f'Jumlah Perizinan Berdasarkan Kewenangan<br>Periode {report.period_name} Tahun {report.year}',
+                        template='plotly_dark', 
+                        height=400,
+                        yaxis={'categoryorder': 'total ascending'}
+                    )
                     st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
-                    # Table for Kewenangan breakdown
+                    # Detailed table with numbered rows
+                    total = sum(kew_data.values())
+                    sorted_items = sorted(kew_data.items(), key=lambda x: x[1], reverse=True)
+                    
                     kew_df = pd.DataFrame({
-                        'Kewenangan': list(kew_data.keys()),
-                        'Jumlah Perizinan': list(kew_data.values()),
-                        'Persentase': [f"{v/sum(kew_data.values())*100:.1f}%" for v in kew_data.values()]
+                        'No': range(1, len(sorted_items) + 1),
+                        'Kewenangan': [k for k, v in sorted_items],
+                        'Jumlah Perizinan': [f'{v:,}' for k, v in sorted_items],
+                        'Persentase': [f"{v/total*100:.2f}%" for k, v in sorted_items]
                     })
-                    st.markdown('<div style="margin-top: 2rem;">', unsafe_allow_html=True)
-                    st.dataframe(kew_df, use_container_width=True, hide_index=True)
+                    
+                    st.markdown('<div style="margin-top: 0.5rem;">', unsafe_allow_html=True)
+                    st.dataframe(kew_df, use_container_width=True, hide_index=True, height=350)
                     st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Narrative interpretation
+                top_3 = sorted_items[:3] if len(sorted_items) >= 3 else sorted_items
+                narrative = f"""
+                <b>Rekapitulasi Perizinan Berusaha Berbasis Risiko Berdasarkan Kewenangan</b> di Provinsi Lampung 
+                periode {report.period_name} Tahun {report.year}. Dari rekapitulasi data tersebut, 
+                kewenangan tertinggi adalah dari <b>{top_3[0][0]}</b> berjumlah <b>{top_3[0][1]:,}</b> perizinan
+                """
+                if len(top_3) > 1:
+                    narrative += f", diikuti <b>{top_3[1][0]}</b> berjumlah <b>{top_3[1][1]:,}</b>"
+                if len(top_3) > 2:
+                    narrative += f", dan <b>{top_3[2][0]}</b> berjumlah <b>{top_3[2][1]:,}</b>"
+                narrative += "."
+                
+                st.markdown(f'<div class="narrative-box">{narrative}</div>', unsafe_allow_html=True)
     
     # Section: Kesimpulan
     st.markdown('<div class="section-title">Kesimpulan</div>', unsafe_allow_html=True)
