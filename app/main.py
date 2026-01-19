@@ -1470,8 +1470,39 @@ def render_report(report, stats: dict):
         current_summary = tw_summary.get(periode_name)
         
         if current_summary:
-            # Project count chart
-            st.markdown('<div class="section-title">3.1 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
+            # First show monthly project chart (like NIB monthly chart)
+            st.markdown('<div class="section-title">3.1 Jumlah Proyek per Bulan</div>', 
+                        unsafe_allow_html=True)
+            
+            # Get monthly project data from proyek loader
+            proyek_data = None
+            proyek_file = st.session_state.get('proyek_ref_file')
+            if proyek_file:
+                from app.data.reference_loader import ReferenceDataLoader
+                loader = ReferenceDataLoader()
+                months = loader.get_months_for_period(report.period_type, report.period_name)
+                
+                # Get cached proyek data
+                proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
+                
+                if proyek_data:
+                    # Build monthly data dict for current period
+                    monthly_project_data = {}
+                    for month in months:
+                        if month in proyek_data.monthly_projects:
+                            monthly_project_data[month] = proyek_data.monthly_projects[month]
+                    
+                    if monthly_project_data:
+                        # Use existing chart generator for monthly bar
+                        fig_monthly = chart_gen.create_monthly_bar_with_trendline(
+                            monthly_project_data,
+                            title="Jumlah Proyek per Bulan",
+                            show_trendline=True
+                        )
+                        st.plotly_chart(fig_monthly, use_container_width=True)
+            
+            # Project count by PM status chart (renamed to 3.2)
+            st.markdown('<div class="section-title">3.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -1546,7 +1577,7 @@ def render_report(report, stats: dict):
                 previous_summary = tw_summary.get(previous_tw) if tw_summary else None
                 
                 if previous_summary:
-                    st.markdown('<div class="section-title">3.2 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
+                    st.markdown('<div class="section-title">3.3 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Calculate project counts for Q-o-Q
@@ -1590,7 +1621,7 @@ def render_report(report, stats: dict):
                 prev_year_tw = prev_year_summary.get(periode_name)
                 
                 if prev_year_tw:
-                    st.markdown('<div class="section-title">3.3 Perbandingan Y-o-Y (Year-over-Year)</div>', 
+                    st.markdown('<div class="section-title">3.4 Perbandingan Y-o-Y (Year-over-Year)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Estimate project counts for previous year
@@ -1623,7 +1654,7 @@ def render_report(report, stats: dict):
                         st.markdown(f'<div class="narrative-box">{yoy_narr}</div>', unsafe_allow_html=True)
             
             # Project Narrative Interpretation
-            st.markdown('<div class="section-title">3.4 Interpretasi Data Proyek</div>', 
+            st.markdown('<div class="section-title">3.5 Interpretasi Data Proyek</div>', 
                         unsafe_allow_html=True)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
             project_narrative = narrative_gen.generate_project_narrative(
