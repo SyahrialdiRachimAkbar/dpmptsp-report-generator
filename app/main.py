@@ -1283,7 +1283,10 @@ def render_report(report, stats: dict):
     # Note: get_qoq_comparison in aggregator mostly handles this logic for us
     # but we need to ensure files are loaded. As we loaded main file, it might contain prev months.
     # If not, we might be limited. But let's use what we have.
-    _, prev_q_report, qoq_change = aggregator.get_qoq_comparison(report.period_name, report.year)
+    prev_q_report = None
+    qoq_change = None
+    if report.period_type == "Triwulan":
+        _, prev_q_report, qoq_change = aggregator.get_qoq_comparison(report.period_name, report.year)
     
     # === Top Row: Monthly Chart + Narrative ===
     col_top_left, col_top_right = st.columns([1, 1])
