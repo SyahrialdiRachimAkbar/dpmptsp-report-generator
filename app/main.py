@@ -1157,7 +1157,7 @@ def render_report(report, stats: dict):
                 unsafe_allow_html=True)
     
     # Section 2: Rekapitulasi NIB Total
-    st.markdown('<div class="section-title">1.1 Rekapitulasi Data NIB</div>', 
+    st.markdown('<div class="section-title">1. Nomor Induk Berusaha</div>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
@@ -1192,7 +1192,7 @@ def render_report(report, stats: dict):
                 unsafe_allow_html=True)
     
     # Section 3: Per Kabupaten/Kota
-    st.markdown('<div class="section-title">1.2 Rekapitulasi per Kabupaten/Kota</div>', 
+    st.markdown('<div class="section-title">1.1 Rekapitulasi Data NIB per Bulan</div>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns([1.5, 1])
@@ -1221,7 +1221,7 @@ def render_report(report, stats: dict):
                 unsafe_allow_html=True)
     
     # Section 4: Status PM
-    st.markdown('<div class="section-title">1.3 Status Penanaman Modal</div>', 
+    st.markdown('<div class="section-title">1.2 Rekapitulasi per Kabupaten/Kota</div>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
@@ -1244,7 +1244,7 @@ def render_report(report, stats: dict):
                 unsafe_allow_html=True)
     
     # Section 5: Pelaku Usaha
-    st.markdown('<div class="section-title">1.4 Kategori Pelaku Usaha</div>', 
+    st.markdown('<div class="section-title">1.3 Status Penanaman Modal</div>', 
                 unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
@@ -1269,7 +1269,7 @@ def render_report(report, stats: dict):
     # Section 6: Sektor & Risiko (if data available)
     sektor_risiko_data = stats.get('sektor_risiko', {})
     if sektor_risiko_data:
-        st.markdown('<div class="section-title">1.5 Perizinan Berdasarkan Risiko dan Sektor</div>', 
+        st.markdown('<div class="section-title">1.4 Kategori Pelaku Usaha</div>', 
                     unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
