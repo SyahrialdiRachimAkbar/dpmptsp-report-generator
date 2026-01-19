@@ -84,7 +84,7 @@ Data yang disajikan meliputi distribusi NIB berdasarkan kabupaten/kota, status p
         return text
     
     def _generate_rekapitulasi_nib(self, report: PeriodReport, stats: Dict) -> str:
-        """Generate NIB summary narrative."""
+        """Generate NIB summary narrative with enhanced insights."""
         total = stats.get('total_nib', 0)
         monthly = stats.get('monthly_totals', {})
         change_pct = stats.get('change_percentage')
@@ -93,36 +93,71 @@ Data yang disajikan meliputi distribusi NIB berdasarkan kabupaten/kota, status p
         # Format total with thousands separator
         total_formatted = f"{total:,}".replace(",", ".")
         
-        # Monthly breakdown text
+        # Monthly breakdown with percentages and insights
         monthly_text = ""
+        peak_month = ""
+        peak_value = 0
+        monthly_growth_insight = ""
+        
         if monthly:
             monthly_parts = []
-            for bulan, nilai in monthly.items():
+            month_values = list(monthly.items())
+            
+            # Identify peak month
+            for bulan, nilai in month_values:
+                if nilai > peak_value:
+                    peak_value = nilai
+                    peak_month = bulan
+            
+            # Build monthly breakdown with percentages
+            for bulan, nilai in month_values:
                 nilai_formatted = f"{nilai:,}".replace(",", ".")
-                monthly_parts.append(f"{bulan} ({nilai_formatted} NIB)")
+                pct_of_total = (nilai / total * 100) if total > 0 else 0
+                monthly_parts.append(f"{bulan} ({nilai_formatted} NIB, {pct_of_total:.1f}%)")
+            
             monthly_text = ", ".join(monthly_parts)
+            
+            # Calculate month-over-month growth for multi-month periods
+            if len(month_values) >= 2:
+                first_month_val = month_values[0][1]
+                last_month_val = month_values[-1][1]
+                
+                if first_month_val > 0:
+                    mom_growth = ((last_month_val - first_month_val) / first_month_val) * 100
+                    
+                    if mom_growth > 10:
+                        monthly_growth_insight = f" Terdapat akselerasi positif dengan pertumbuhan {mom_growth:.1f}% dari awal ke akhir periode, dengan {peak_month} mencatat kinerja tertinggi."
+                    elif mom_growth > 0:
+                        monthly_growth_insight = f" Pertumbuhan moderat sebesar {mom_growth:.1f}% terlihat dari bulan pertama ke bulan terakhir periode ini."
+                    elif mom_growth < -10:
+                        monthly_growth_insight = f" Teridentifikasi penurunan {abs(mom_growth):.1f}% dari awal ke akhir periode, yang memerlukan perhatian khusus."
+                    elif mom_growth < 0:
+                        monthly_growth_insight = f" Penurunan ringan {abs(mom_growth):.1f}% tercatat dari bulan pertama ke akhir periode."
+                    else:
+                        monthly_growth_insight = f" Konsistensi performa terlihat sepanjang periode dengan fluktuasi minimal."
         
-        # Trend analysis
+        # Enhanced trend analysis with actionable insights
         trend_text = ""
         if change_pct is not None and prev_total is not None:
             prev_formatted = f"{prev_total:,}".replace(",", ".")
-            if change_pct > 0:
-                trend_text = f"\n\nDibandingkan dengan periode sebelumnya ({prev_formatted} NIB), terjadi peningkatan sebesar {change_pct:.1f}%. Hal ini menunjukkan pertumbuhan positif dalam aktivitas perizinan berusaha di Provinsi Lampung."
-            elif change_pct < 0:
-                trend_text = f"\n\nDibandingkan dengan periode sebelumnya ({prev_formatted} NIB), terjadi penurunan sebesar {abs(change_pct):.1f}%. Penurunan ini perlu dikaji lebih lanjut untuk mengetahui faktor-faktor yang mempengaruhinya."
+            abs_change = total - prev_total
+            abs_change_formatted = f"{abs(abs_change):,}".replace(",", ".")
+            
+            if change_pct > 15:
+                trend_text = f"\n\nKinerja periode ini menunjukkan pertumbuhan signifikan sebesar {change_pct:.1f}% ({abs_change_formatted} NIB) dibanding periode sebelumnya ({prev_formatted} NIB). Momentum positif ini mengindikasikan meningkatnya minat investasi dan aktivitas ekonomi di Provinsi Lampung, yang perlu dipertahankan melalui kebijakan yang kondusif."
+            elif change_pct > 5:
+                trend_text = f"\n\nTercatat peningkatan moderat sebesar {change_pct:.1f}% ({abs_change_formatted} NIB) dibandingkan periode sebelumnya ({prev_formatted} NIB). Pertumbuhan stabil ini menunjukkan iklim investasi yang kondusif."
+            elif change_pct > 0:
+                trend_text = f"\n\nPertumbuhan ringan sebesar {change_pct:.1f}% ({abs_change_formatted} NIB) dari periode sebelumnya ({prev_formatted} NIB) mengindikasikan stabilitas dengan potensi peningkatan lebih lanjut."
+            elif change_pct > -5:
+                trend_text = f"\n\nPenurunan minor sebesar {abs(change_pct):.1f}% ({abs_change_formatted} NIB) dari periode sebelumnya ({prev_formatted} NIB). Fluktuasi ini masih dalam batas normal dan perlu dipantau."
+            elif change_pct > -15:
+                trend_text = f"\n\nTerjadi penurunan sebesar {abs(change_pct):.1f}% ({abs_change_formatted} NIB) dibandingkan periode sebelumnya ({prev_formatted} NIB). Evaluasi mendalam diperlukan untuk mengidentifikasi faktor penyebab dan strategi perbaikan."
             else:
-                trend_text = f"\n\nJumlah NIB stabil dibandingkan periode sebelumnya ({prev_formatted} NIB)."
+                trend_text = f"\n\nPenurunan signifikan {abs(change_pct):.1f}% ({abs_change_formatted} NIB) dari periode sebelumnya ({prev_formatted} NIB) memerlukan perhatian serius. Rekomendasi: analisis komprehensif terhadap hambatan investasi dan revisi strategi promosi."
         
-        # Monthly trend within period
-        monthly_trend = ""
-        if len(monthly) > 1:
-            values = list(monthly.values())
-            if values[-1] > values[0]:
-                monthly_trend = f" Terlihat tren peningkatan dari bulan ke bulan dalam periode ini."
-            elif values[-1] < values[0]:
-                monthly_trend = f" Terlihat tren penurunan dari bulan ke bulan dalam periode ini."
-        
-        text = f"""Pada {self._get_periode_text(report)}, total NIB yang diterbitkan di Provinsi Lampung mencapai {total_formatted} NIB. Rincian per bulan adalah sebagai berikut: {monthly_text}.{monthly_trend}{trend_text}"""
+        # Build final narrative with enhanced structure
+        text = f"""Pada {self._get_periode_text(report)}, total NIB yang diterbitkan di Provinsi Lampung mencapai {total_formatted} NIB. Rincian distribusi per bulan: {monthly_text}.{monthly_growth_insight}{trend_text}"""
         
         return text
     
