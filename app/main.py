@@ -1678,7 +1678,7 @@ def render_report(report, stats: dict):
                 previous_summary = tw_summary.get(previous_tw) if tw_summary else None
                 
                 if previous_summary:
-                    st.markdown('<div class="section-title">3.4 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
+                    st.markdown('<div class="section-title">Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Calculate project counts for Q-o-Q
@@ -1722,7 +1722,7 @@ def render_report(report, stats: dict):
                 prev_year_tw = prev_year_summary.get(periode_name)
                 
                 if prev_year_tw:
-                    st.markdown('<div class="section-title">3.5 Perbandingan Y-o-Y (Year-over-Year)</div>', 
+                    st.markdown('<div class="section-title">Perbandingan Y-o-Y (Year-over-Year)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Estimate project counts for previous year
@@ -1755,7 +1755,7 @@ def render_report(report, stats: dict):
                         st.markdown(f'<div class="narrative-box">{yoy_narr}</div>', unsafe_allow_html=True)
             
             # Project Narrative Interpretation
-            st.markdown('<div class="section-title">3.6 Interpretasi Data Proyek</div>', 
+            st.markdown('<div class="section-title">Interpretasi Data Proyek</div>', 
                         unsafe_allow_html=True)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
             project_narrative = narrative_gen.generate_project_narrative(
