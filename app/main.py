@@ -1969,39 +1969,17 @@ def render_report(report, stats: dict):
                     total = sum(kew_data.values())
                     sorted_items = sorted(kew_data.items(), key=lambda x: x[1], reverse=True)
                     
-                    # Create styled HTML table for better visibility
-                    table_html = f'''
-                    <div style="max-height: 500px; overflow-y: auto;">
-                    <table style="width: 100%; border-collapse: collapse; background: rgba(30, 41, 59, 0.8); border-radius: 8px;">
-                        <thead>
-                            <tr style="background: rgba(59, 130, 246, 0.3);">
-                                <th style="padding: 12px; text-align: center; border-bottom: 2px solid #3B82F6; color: #fff; font-weight: 600;">No</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #3B82F6; color: #fff; font-weight: 600;">Kewenangan</th>
-                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #3B82F6; color: #fff; font-weight: 600;">Jumlah</th>
-                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #3B82F6; color: #fff; font-weight: 600;">%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                    '''
-                    for i, (kew_name, count) in enumerate(sorted_items, 1):
-                        pct = count / total * 100 if total > 0 else 0
-                        bg_color = 'rgba(59, 130, 246, 0.1)' if i % 2 == 0 else 'transparent'
-                        table_html += f'''
-                            <tr style="background: {bg_color};">
-                                <td style="padding: 10px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); color: #e2e8f0;">{i}</td>
-                                <td style="padding: 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); color: #fff;">{kew_name}</td>
-                                <td style="padding: 10px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.1); color: #10B981; font-weight: 600;">{count:,}</td>
-                                <td style="padding: 10px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.1); color: #F59E0B;">{pct:.2f}%</td>
-                            </tr>
-                        '''
-                    table_html += '''
-                        </tbody>
-                    </table>
-                    </div>
-                    '''
+                    # Use pandas dataframe for reliable table display
+                    import pandas as pd
+                    kew_df = pd.DataFrame({
+                        'No': range(1, len(sorted_items) + 1),
+                        'Kewenangan': [k for k, v in sorted_items],
+                        'Jumlah': [v for k, v in sorted_items],
+                        'Persentase': [f"{v/total*100:.2f}%" for k, v in sorted_items]
+                    })
                     
-                    st.markdown(f'<p style="margin-bottom: 0.5rem;"><b>Total: {len(sorted_items)} Kewenangan | {total:,} Perizinan</b></p>', unsafe_allow_html=True)
-                    st.markdown(table_html, unsafe_allow_html=True)
+                    st.markdown(f'**Total: {len(sorted_items)} Kewenangan | {total:,} Perizinan**')
+                    st.dataframe(kew_df, use_container_width=True, hide_index=True, height=450)
                 
                 # Narrative interpretation
                 top_3 = sorted_items[:3] if len(sorted_items) >= 3 else sorted_items
