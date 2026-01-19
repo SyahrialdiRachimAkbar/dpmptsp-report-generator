@@ -9,7 +9,7 @@ This module handles aggregation of NIB data for different periods:
 
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
 
