@@ -743,6 +743,40 @@ def render_sidebar():
         if proyek_file:
             st.session_state.proyek_ref_file = proyek_file
             st.success(f"✅ PROYEK: {proyek_file.name}")
+        
+        # === Previous Year Files (Optional for Y-o-Y) ===
+        with st.expander("📁 Previous Year (Y-o-Y)", expanded=False):
+            st.caption("Upload previous year files for Year-over-Year comparison")
+            
+            # Previous Year NIB
+            nib_prev_file = st.file_uploader(
+                "NIB Previous Year (.xlsx)",
+                type=['xlsx', 'xls'],
+                key="nib_prev_uploader"
+            )
+            if nib_prev_file:
+                st.session_state.nib_prev_ref_file = nib_prev_file
+                st.success(f"✅ {nib_prev_file.name}")
+            
+            # Previous Year PB OSS
+            pb_prev_file = st.file_uploader(
+                "PB OSS Previous Year (.xlsx)",
+                type=['xlsx', 'xls'],
+                key="pb_oss_prev_uploader"
+            )
+            if pb_prev_file:
+                st.session_state.pb_oss_prev_ref_file = pb_prev_file
+                st.success(f"✅ {pb_prev_file.name}")
+            
+            # Previous Year PROYEK
+            proyek_prev_file = st.file_uploader(
+                "PROYEK Previous Year (.xlsx)",
+                type=['xlsx', 'xls'],
+                key="proyek_prev_uploader"
+            )
+            if proyek_prev_file:
+                st.session_state.proyek_prev_ref_file = proyek_prev_file
+                st.success(f"✅ {proyek_prev_file.name}")
             
         st.divider()
         
