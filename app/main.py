@@ -1536,77 +1536,100 @@ def render_report(report, stats: dict):
         current_summary = tw_summary.get(periode_name)
         
         if current_summary:
+            # 2.3 Skala Usaha visualization
             st.markdown('<div class="section-title">2.3 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
                         unsafe_allow_html=True)
             
-            # Get monthly project data from proyek loader
+            # Get proyek data
             proyek_data = None
             proyek_file = st.session_state.get('proyek_ref_file')
             if proyek_file:
                 from app.data.reference_loader import ReferenceDataLoader
                 loader = ReferenceDataLoader()
                 months = loader.get_months_for_period(report.period_type, report.period_name)
-                
-                # Get cached proyek data
                 proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
                 
                 if proyek_data:
-                    # Build monthly data dict for current period
-                    monthly_project_data = {}
-                    for month in months:
-                        if month in proyek_data.monthly_projects:
-                            monthly_project_data[month] = proyek_data.monthly_projects[month]
+                    # Skala Usaha chart (from uraian_skala_usaha column)
+                    skala_data = proyek_data.get_period_by_skala_usaha(months)
                     
-                    if monthly_project_data:
-                        # Use existing chart generator for monthly bar
-                        fig_monthly = chart_gen.create_monthly_bar_with_trendline(
-                            monthly_project_data,
-                            title="Jumlah Proyek per Bulan",
-                            show_trendline=True
+                    if skala_data:
+                        import plotly.graph_objects as go
+                        
+                        # Define order for skala categories
+                        skala_order = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
+                        ordered_data = {k: skala_data.get(k, 0) for k in skala_order if k in skala_data}
+                        # Add any remaining categories
+                        for k, v in skala_data.items():
+                            if k not in ordered_data:
+                                ordered_data[k] = v
+                        
+                        fig_skala = go.Figure(data=[
+                            go.Bar(
+                                x=list(ordered_data.keys()),
+                                y=list(ordered_data.values()),
+                                marker_color=['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'][:len(ordered_data)],
+                                text=[f'{v:,}' for v in ordered_data.values()],
+                                textposition='outside'
+                            )
+                        ])
+                        fig_skala.update_layout(
+                            title='Jumlah Proyek Berdasarkan Skala Usaha',
+                            xaxis_title='Skala Usaha',
+                            yaxis_title='Jumlah Proyek',
+                            template='plotly_dark',
+                            showlegend=False,
+                            height=400
                         )
-                        st.plotly_chart(fig_monthly, use_container_width=True)
+                        st.plotly_chart(fig_skala, use_container_width=True)
+                        
+                        # Interpretation for Skala Usaha
+                        total_skala = sum(ordered_data.values())
+                        top_skala = max(ordered_data.items(), key=lambda x: x[1]) if ordered_data else ("", 0)
+                        interpretation_skala = f"""
+                        <b>Analisis dan Interpretasi:</b><br>
+                        Berdasarkan skala usaha, mayoritas proyek di Provinsi Lampung berada pada kategori 
+                        <b>{top_skala[0]}</b> dengan jumlah <b>{top_skala[1]:,}</b> proyek ({top_skala[1]/total_skala*100:.1f}% dari total).
+                        """
+                        st.markdown(f'<div class="narrative-box">{interpretation_skala}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
             
-            # Jumlah Investasi visualization
+            # 2.4 Jumlah Investasi visualization
             st.markdown('<div class="section-title">2.4 Rekapitulasi Data Proyek Berdasarkan Jumlah Investasi</div>', 
                         unsafe_allow_html=True)
             
-            if proyek_data:
-                skala_data = proyek_data.get_period_by_skala_usaha(months) if proyek_data else {}
-                
-                if skala_data:
-                    # Create bar chart for Skala Usaha using Plotly
-                    import plotly.graph_objects as go
-                    
-                    # Define order for skala categories
-                    skala_order = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
-                    ordered_data = {k: skala_data.get(k, 0) for k in skala_order if k in skala_data}
-                    # Add any remaining categories
-                    for k, v in skala_data.items():
-                        if k not in ordered_data:
-                            ordered_data[k] = v
-                    
-                    fig_skala = go.Figure(data=[
-                        go.Bar(
-                            x=list(ordered_data.keys()),
-                            y=list(ordered_data.values()),
-                            marker_color=['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'][:len(ordered_data)],
-                            text=[f'{v:,}' for v in ordered_data.values()],
-                            textposition='outside'
-                        )
-                    ])
-                    fig_skala.update_layout(
-                        title='Jumlah Proyek Berdasarkan Skala Usaha',
-                        xaxis_title='Skala Usaha',
-                        yaxis_title='Jumlah Proyek',
+            if proyek_file and proyek_data:
+                # Investment by Kab/Kota
+                import plotly.graph_objects as go
+                inv_by_wilayah = proyek_data.get_period_by_wilayah(months)
+                if inv_by_wilayah:
+                    sorted_inv = dict(sorted(inv_by_wilayah.items(), key=lambda x: x[1], reverse=True)[:15])
+                    fig_inv = go.Figure(data=[go.Bar(
+                        x=list(sorted_inv.values()), 
+                        y=list(sorted_inv.keys()), 
+                        orientation='h', 
+                        marker_color='#10B981'
+                    )])
+                    fig_inv.update_layout(
+                        title='Jumlah Investasi per Kabupaten/Kota (Rupiah)',
                         template='plotly_dark',
-                        showlegend=False,
-                        height=400
+                        height=400,
+                        yaxis={'categoryorder': 'total ascending'}
                     )
-                    st.plotly_chart(fig_skala, use_container_width=True)
-                else:
-                    st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
+                    st.plotly_chart(fig_inv, use_container_width=True)
+                    
+                    # Interpretation
+                    top_inv = list(sorted_inv.items())[0] if sorted_inv else ("", 0)
+                    total_inv = sum(sorted_inv.values())
+                    interpretation_inv = f"""
+                    <b>Analisis dan Interpretasi:</b><br>
+                    <b>{top_inv[0]}</b> mencatatkan investasi tertinggi dengan nilai 
+                    <b>Rp {top_inv[1]/1e9:,.2f} Miliar</b> ({top_inv[1]/total_inv*100:.1f}% dari total investasi).
+                    """
+                    st.markdown(f'<div class="narrative-box">{interpretation_inv}</div>', unsafe_allow_html=True)
             
-            # Project count by PM status chart (renamed to 3.3)
+            # 2.5 Tenaga Kerja visualization
             st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
                         unsafe_allow_html=True)
             
