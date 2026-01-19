@@ -1811,19 +1811,38 @@ def render_report(report, stats: dict):
             # 3.1 Period and Location
             st.markdown('<div class="section-title">3.1 Rekapitulasi Berdasarkan Periode dan Lokasi Usaha di Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
-            kab_data = pb_data.get_period_by_kab_kota(months)
-            if kab_data:
-                import plotly.graph_objects as go
-                sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
-                fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
-                fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
-                st.plotly_chart(fig, use_container_width=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                # Monthly permits chart
+                monthly_permits = pb_data.get_period_permits_by_month(months) if hasattr(pb_data, 'get_period_permits_by_month') else {}
+                if not monthly_permits:
+                    # Build from monthly data
+                    monthly_permits = {}
+                    for month in months:
+                        monthly_permits[month] = pb_data.monthly_permits.get(month, 0)
+                if monthly_permits and sum(monthly_permits.values()) > 0:
+                    import plotly.graph_objects as go
+                    fig_monthly = go.Figure(data=[go.Bar(x=list(monthly_permits.keys()), y=list(monthly_permits.values()), marker_color='#3B82F6')])
+                    fig_monthly.update_layout(title='Perizinan per Bulan', template='plotly_dark', height=400, xaxis_title='Bulan', yaxis_title='Jumlah')
+                    st.plotly_chart(fig_monthly, use_container_width=True)
+            
+            with col2:
+                # Kab/Kota chart
+                kab_data = pb_data.get_period_by_kab_kota(months)
+                if kab_data:
+                    import plotly.graph_objects as go
+                    sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
+                    fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
+                    fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                    st.plotly_chart(fig, use_container_width=True)
             
             # 3.2 Status PM
             st.markdown('<div class="section-title">3.2 Rekapitulasi Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             pm_data = pb_data.get_period_status_pm(months)
             if pm_data:
+                import plotly.graph_objects as go
                 fig = go.Figure(data=[go.Bar(x=list(pm_data.keys()), y=list(pm_data.values()), marker_color=['#10B981', '#F59E0B'][:len(pm_data)])])
                 fig.update_layout(title='Perizinan per Status PM', template='plotly_dark', height=350)
                 st.plotly_chart(fig, use_container_width=True)
@@ -1833,6 +1852,7 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             risk_data = pb_data.get_period_risk(months)
             if risk_data:
+                import plotly.graph_objects as go
                 fig = go.Figure(data=[go.Bar(x=list(risk_data.keys()), y=list(risk_data.values()), marker_color=['#22C55E', '#EAB308', '#EF4444', '#8B5CF6'][:len(risk_data)])])
                 fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_dark', height=350)
                 st.plotly_chart(fig, use_container_width=True)
@@ -1841,17 +1861,21 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">3.4 Rekapitulasi Berdasarkan Sektor Kementerian/Lembaga</div>', 
                         unsafe_allow_html=True)
             sector_data = pb_data.get_period_sector(months)
-            if sector_data:
+            if sector_data and sum(sector_data.values()) > 0:
+                import plotly.graph_objects as go
                 sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
                 fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
                 fig.update_layout(title='Perizinan per Sektor (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Data sektor kementerian/lembaga tidak tersedia atau kosong.")
             
             # 3.5 Jenis Perizinan
             st.markdown('<div class="section-title">3.5 Rekapitulasi Berdasarkan Jenis Perizinan</div>', 
                         unsafe_allow_html=True)
             jenis_data = pb_data.get_period_jenis_perizinan(months)
             if jenis_data:
+                import plotly.graph_objects as go
                 sorted_jenis = dict(sorted(jenis_data.items(), key=lambda x: x[1], reverse=True)[:10])
                 fig = go.Figure(data=[go.Bar(x=list(sorted_jenis.values()), y=list(sorted_jenis.keys()), orientation='h', marker_color='#06B6D4')])
                 fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
@@ -1862,18 +1886,36 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             status_data = pb_data.get_period_status_perizinan(months)
             if status_data:
+                import plotly.graph_objects as go
                 fig = go.Figure(data=[go.Pie(labels=list(status_data.keys()), values=list(status_data.values()), hole=0.4)])
                 fig.update_layout(title='Perizinan per Status Respon', template='plotly_dark', height=400)
                 st.plotly_chart(fig, use_container_width=True)
             
-            # 3.7 Kewenangan (NO Gubernur filter - all data)
+            # 3.7 Kewenangan (NO Gubernur filter - all data, grouped by DPMPTSP)
             st.markdown('<div class="section-title">3.7 Rekapitulasi Berdasarkan Kewenangan</div>', 
                         unsafe_allow_html=True)
             kew_data = pb_data.get_period_kewenangan(months)
             if kew_data:
-                fig = go.Figure(data=[go.Bar(x=list(kew_data.keys()), y=list(kew_data.values()), marker_color=['#3B82F6', '#10B981', '#F59E0B'][:len(kew_data)])])
-                fig.update_layout(title='Perizinan per Kewenangan', template='plotly_dark', height=350)
-                st.plotly_chart(fig, use_container_width=True)
+                import plotly.graph_objects as go
+                import pandas as pd
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Pie chart for Kewenangan
+                    fig = go.Figure(data=[go.Pie(labels=list(kew_data.keys()), values=list(kew_data.values()), hole=0.4)])
+                    fig.update_layout(title='Perizinan per Kewenangan', template='plotly_dark', height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Table for Kewenangan breakdown
+                    kew_df = pd.DataFrame({
+                        'Kewenangan': list(kew_data.keys()),
+                        'Jumlah Perizinan': list(kew_data.values()),
+                        'Persentase': [f"{v/sum(kew_data.values())*100:.1f}%" for v in kew_data.values()]
+                    })
+                    st.markdown('<div style="margin-top: 2rem;">', unsafe_allow_html=True)
+                    st.dataframe(kew_df, use_container_width=True, hide_index=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
     
     # Section: Kesimpulan
     st.markdown('<div class="section-title">Kesimpulan</div>', unsafe_allow_html=True)
