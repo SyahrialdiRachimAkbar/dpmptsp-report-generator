@@ -1302,7 +1302,7 @@ def render_report(report, stats: dict):
             st.plotly_chart(fig_monthly, use_container_width=True)
             
     with col_top_right:
-        st.markdown(f'<div class="narrative-box">{narratives.nib_overview}</div>', 
+        st.markdown(f'<div class="narrative-box">{narratives.rekapitulasi_nib}</div>', 
                     unsafe_allow_html=True)
 
     # === Bottom Row: Y-o-Y + Q-o-Q ===
