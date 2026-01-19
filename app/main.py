@@ -1164,7 +1164,8 @@ def render_report(report, stats: dict):
     total_nib = stats.get('total_nib', 0)
     pma_count = stats.get('by_pm', {}).get('PMA', 0)
     pmdn_count = stats.get('by_pm', {}).get('PMDN', 0)
-    umk_count = stats.get('by_skala', {}).get('UMK', 0) if stats.get('by_skala') else 0
+    pelaku = stats.get('pelaku_usaha_distribution', {})
+    umk_count = pelaku.get('UMK', 0)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
