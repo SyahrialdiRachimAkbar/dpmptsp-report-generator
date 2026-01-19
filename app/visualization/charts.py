@@ -182,8 +182,8 @@ class ChartGenerator:
         self,
         current_data: Dict[str, int],
         previous_data: Optional[Dict[str, int]] = None,
-        current_label: str = "TW II 2025",
-        previous_label: str = "TW I 2025",
+        current_label: str = "Current Period",
+        previous_label: str = "Previous Period",
         title: str = "Perbandingan Quarter-over-Quarter"
     ) -> go.Figure:
         """

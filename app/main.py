@@ -749,8 +749,10 @@ def render_sidebar():
         # Period selection
         st.header("📅 Pilih Periode")
         
-        # Year selection (Auto-detect from files if possible, else manual)
-        detected_year = 2025
+        # Year selection (Auto-detect from files if possible, else current year)
+        from datetime import datetime
+        current_year = datetime.now().year
+        detected_year = current_year
         # Try to detect from files
         loader = ReferenceDataLoader()
         if st.session_state.get('nib_ref_file'):
@@ -760,7 +762,9 @@ def render_sidebar():
             y = loader.extract_year_from_filename(st.session_state.proyek_ref_file.name)
             if y: detected_year = y
             
-        tahun_options = [detected_year] + [y for y in [2026, 2025, 2024, 2023] if y != detected_year]
+        # Generate year options dynamically
+        year_range = [current_year + 1, current_year, current_year - 1, current_year - 2]
+        tahun_options = [detected_year] + [y for y in year_range if y != detected_year]
         
         tahun = st.selectbox("Tahun", options=tahun_options)
         

@@ -395,7 +395,7 @@ class ReferenceDataLoader:
             
             # Extract year
             if year is None:
-                year = self.extract_year_from_filename(filename) or 2025
+                year = self.extract_year_from_filename(filename) or datetime.now().year
             
             # Parse dates to months
             if date_col:
@@ -529,7 +529,7 @@ class ReferenceDataLoader:
             sector_col = self._find_column(df, ['sektor', 'sector', 'kbli', 'judul_kbli'])
             
             if year is None:
-                year = self.extract_year_from_filename(filename) or 2025
+                year = self.extract_year_from_filename(filename) or datetime.now().year
             
             # Parse dates
             if date_col:
@@ -661,7 +661,7 @@ class ReferenceDataLoader:
             skala_col = self._find_column(df, ['uraian_skala_usaha', 'skala_usaha', 'skala usaha'])
             
             if year is None:
-                year = self.extract_year_from_filename(filename) or 2025
+                year = self.extract_year_from_filename(filename) or datetime.now().year
             
             # Parse dates
             if date_col:
