@@ -28,27 +28,60 @@ class ChartGenerator:
     - Indonesian language labels
     """
     
-    # Color scheme
+    # Color scheme - UNIFIED PALETTE
     COLORS = {
+        # Primary palette (blue gradient)
         'primary': '#1e3a5f',
         'secondary': '#3d7ea6',
         'tertiary': '#6db3d5',
-        'accent': '#5cb85c',
-        'warning': '#f0ad4e',
-        'danger': '#d9534f',
         'light': '#e8f4f8',
-        'pma': '#2ecc71',
-        'pmdn': '#3498db',
-        'umk': '#9b59b6',
-        'non_umk': '#e74c3c',
+        
+        # Semantic colors
+        'accent': '#5cb85c',      # Green - positive/success
+        'warning': '#f0ad4e',     # Orange - warning/neutral
+        'danger': '#d9534f',      # Red - negative/danger
+        
+        # Investment type colors (consistent blue-green palette)
+        'pma': '#2ecc71',         # Green for PMA
+        'pmdn': '#3498db',        # Blue for PMDN
+        
+        # Business actor colors (using primary palette)
+        'umk': '#3d7ea6',         # Secondary blue for UMK
+        'non_umk': '#1e3a5f',     # Primary blue for NON-UMK
+        
+        # Risk level colors (gradient from green to red)
+        'risk_rendah': '#27ae60',          # Green - Low risk
+        'risk_menengah_rendah': '#f1c40f', # Yellow - Medium-low
+        'risk_menengah_tinggi': '#e67e22', # Orange - Medium-high
+        'risk_tinggi': '#c0392b',          # Red - High risk
+        
+        # Labor colors
+        'tki': '#3d7ea6',         # Secondary blue for TKI
+        'tka': '#1e3a5f',         # Primary blue for TKA
+        
+        # Comparison colors
+        'current': '#5cb85c',     # Green for current period
+        'previous': '#3d7ea6',    # Blue for previous period
     }
     
-    # Gradient colors (light to dark)
+    # Gradient colors (light to dark) - Primary blue palette
     GRADIENT = [
         '#e8f4f8', '#cce5ef', '#a8d4e6', '#84c3dd',
         '#60b2d4', '#3d9fc9', '#2d8bb8', '#1e7aa6',
         '#1a6a94', '#165a82', '#124a70', '#1e3a5f'
     ]
+    
+    # Sector colors - consistent with primary palette
+    SECTOR_COLORS = {
+        'Kelautan': '#1e7aa6',
+        'Perindustrian': '#3d7ea6',
+        'Pertanian': '#6db3d5',
+        'Perhubungan': '#84c3dd',
+        'Kesehatan': '#a8d4e6',
+        'Komunikasi': '#60b2d4',
+        'Energi': '#2d8bb8',
+        'Pariwisata': '#165a82',
+    }
     
     def __init__(self, width: int = 800, height: int = 500):
         self.width = width
@@ -366,7 +399,7 @@ class ChartGenerator:
         """
         labels = ['UMK', 'NON-UMK']
         values = [umk_total, non_umk_total]
-        colors = [self.COLORS['umk'], self.COLORS['non_umk']]
+        colors = [self.COLORS['secondary'], self.COLORS['primary']]
         
         # Calculate percentages
         total = umk_total + non_umk_total
@@ -507,7 +540,12 @@ class ChartGenerator:
         """
         labels = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
         values = [rendah, menengah_rendah, menengah_tinggi, tinggi]
-        colors = ['#27ae60', '#f1c40f', '#e67e22', '#e74c3c']
+        colors = [
+            self.COLORS['risk_rendah'],
+            self.COLORS['risk_menengah_rendah'],
+            self.COLORS['risk_menengah_tinggi'],
+            self.COLORS['risk_tinggi']
+        ]
         
         total = sum(values)
         percentages = [(v/total*100) if total > 0 else 0 for v in values]
@@ -560,19 +598,8 @@ class ChartGenerator:
         labels = list(sorted_data.keys())
         values = list(sorted_data.values())
         
-        # Specific colors for each sector matching the template style
-        sector_color_map = {
-            'Kelautan': '#4dbfa4',      # Teal/green
-            'Perindustrian': '#f4a261', # Orange
-            'Pertanian': '#6a9bd1',     # Blue
-            'Perhubungan': '#d4a5c9',   # Light purple/pink
-            'Kesehatan': '#a8d08d',     # Light green
-            'Komunikasi': '#e6c566',    # Yellow/gold
-            'Energi': '#d4c17a',        # Khaki/tan
-            'Pariwisata': '#c9c9c9',    # Gray
-        }
-        
-        colors = [sector_color_map.get(label, '#999999') for label in labels]
+        # Use consistent sector colors from class palette
+        colors = [self.SECTOR_COLORS.get(label, self.COLORS['secondary']) for label in labels]
         
         fig = go.Figure()
         
@@ -616,7 +643,12 @@ class ChartGenerator:
         """
         labels = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
         values = [rendah, menengah_rendah, menengah_tinggi, tinggi]
-        colors = ['#27ae60', '#f1c40f', '#e67e22', '#e74c3c']
+        colors = [
+            self.COLORS['risk_rendah'],
+            self.COLORS['risk_menengah_rendah'],
+            self.COLORS['risk_menengah_tinggi'],
+            self.COLORS['risk_tinggi']
+        ]
         
         # Calculate percentages manually for precise formatting
         total = sum(values)
@@ -866,7 +898,7 @@ class ChartGenerator:
         fig.add_trace(go.Bar(
             x=['TKI (Indonesia)', 'TKA (Asing)'],
             y=[tki, tka],
-            marker_color=[self.COLORS['accent'], self.COLORS['warning']],
+            marker_color=[self.COLORS['tki'], self.COLORS['tka']],
             text=[f'{tki:,}', f'{tka:,}'],
             textposition='outside',
             textfont={'size': 12, 'color': '#e8eaed'},
@@ -982,7 +1014,7 @@ class ChartGenerator:
             name=previous_tw,
             x=categories,
             y=prev_values,
-            marker_color='#f0ad4e',  # warning/orange
+            marker_color=self.COLORS['previous'],
             text=[f'{v:,}' for v in prev_values],
             textposition='outside',
             textfont={'size': 11, 'color': '#e8eaed'},
@@ -993,7 +1025,7 @@ class ChartGenerator:
             name=current_tw,
             x=categories,
             y=curr_values,
-            marker_color=self.COLORS['accent'],  # green
+            marker_color=self.COLORS['current'],
             text=[f'{v:,}' for v in curr_values],
             textposition='outside',
             textfont={'size': 11, 'color': '#e8eaed'},
@@ -1076,7 +1108,7 @@ class ChartGenerator:
             name=f'{tw_name} {previous_year}',
             x=categories,
             y=prev_values,
-            marker_color='#3498db',  # blue
+            marker_color=self.COLORS['previous'],
             text=[f'{v:,}' for v in prev_values],
             textposition='outside',
             textfont={'size': 11, 'color': '#e8eaed'},
@@ -1087,7 +1119,7 @@ class ChartGenerator:
             name=f'{tw_name} {current_year}',
             x=categories,
             y=curr_values,
-            marker_color=self.COLORS['accent'],  # green
+            marker_color=self.COLORS['current'],
             text=[f'{v:,}' for v in curr_values],
             textposition='outside',
             textfont={'size': 11, 'color': '#e8eaed'},
