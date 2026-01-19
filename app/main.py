@@ -1506,6 +1506,33 @@ def render_report(report, stats: dict):
                     <div class="metric-label">Total Proyek {periode_name}</div>
                 </div>
                 ''', unsafe_allow_html=True)
+                
+                # Get top wilayah data for narrative
+                inv_report = st.session_state.investment_reports.get(periode_name) if st.session_state.investment_reports else None
+                top_wilayah_text = ""
+                if inv_report and inv_report.pma_by_wilayah:
+                    # Sort by investment value
+                    sorted_wilayah = sorted(inv_report.pma_by_wilayah, key=lambda x: x.jumlah_rp, reverse=True)[:3]
+                    if sorted_wilayah:
+                        top_entries = [f"<b>{w.name}</b> sebanyak <b>{w.jumlah_rp/1e9:,.0f} M</b>" for w in sorted_wilayah]
+                        top_wilayah_text = f"Proyek tertinggi berada di lokasi {', '.join(top_entries[:2])}" + (f" dan {top_entries[2]}" if len(top_entries) > 2 else "") + "."
+                
+                # Generate comprehensive narrative
+                pma_count = pma_proyek if 'pma_proyek' in dir() else 0
+                pmdn_count = pmdn_proyek if 'pmdn_proyek' in dir() else 0
+                
+                narrative_text = f"""
+                Rekapitulasi jumlah proyek di Provinsi Lampung periode {periode_name} Tahun {current_summary.year} 
+                sebanyak <b>{current_summary.proyek:,}</b> proyek. {top_wilayah_text} 
+                Berdasarkan status penanaman modal, terdapat <b>{pma_count:,}</b> proyek PMA dan 
+                <b>{pmdn_count:,}</b> proyek PMDN.
+                """
+                
+                st.markdown(f'''
+                <div class="narrative-box" style="margin-top: 1rem; font-size: 0.9rem; line-height: 1.6;">
+                    {narrative_text.strip()}
+                </div>
+                ''', unsafe_allow_html=True)
             
             # Q-o-Q Comparison (if previous TW exists)
             tw_order = ["TW I", "TW II", "TW III", "TW IV"]
