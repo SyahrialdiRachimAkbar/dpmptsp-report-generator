@@ -1398,8 +1398,10 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
             
-            # Monthly project chart
+            # Monthly project chart and Kab/Kota side by side
             proyek_file = st.session_state.get('proyek_ref_file')
+            col1, col2 = st.columns(2)
+            
             if proyek_file:
                 from app.data.reference_loader import ReferenceDataLoader
                 loader = ReferenceDataLoader()
@@ -1407,56 +1409,40 @@ def render_report(report, stats: dict):
                 proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
                 
                 if proyek_data:
-                    # Build monthly project data for chart
-                    monthly_project_data = {}
-                    for month in months:
-                        if month in proyek_data.monthly_projects:
-                            monthly_project_data[month] = proyek_data.monthly_projects[month]
+                    with col1:
+                        # Monthly project chart
+                        monthly_project_data = {}
+                        for month in months:
+                            if month in proyek_data.monthly_projects:
+                                monthly_project_data[month] = proyek_data.monthly_projects[month]
+                        
+                        if monthly_project_data:
+                            fig_monthly_proj = chart_gen.create_monthly_bar_with_trendline(
+                                monthly_project_data,
+                                title="Jumlah Proyek per Bulan",
+                                show_trendline=True
+                            )
+                            st.plotly_chart(fig_monthly_proj, use_container_width=True)
                     
-                    if monthly_project_data:
-                        fig_monthly_proj = chart_gen.create_monthly_bar_with_trendline(
-                            monthly_project_data,
-                            title="Jumlah Proyek per Bulan",
-                            show_trendline=True
-                        )
-                        st.plotly_chart(fig_monthly_proj, use_container_width=True)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Investment by wilayah chart (PMA)
-                if current_investment.pma_by_wilayah:
-                    fig_inv_wil = chart_gen.create_investment_by_wilayah_chart(
-                        current_investment.pma_by_wilayah,
-                        title="Investasi PMA per Wilayah"
-                    )
-                    st.plotly_chart(fig_inv_wil, use_container_width=True)
-            
-            with col2:
-                # PMDN by wilayah
-                if current_investment.pmdn_by_wilayah:
-                    fig_inv_wil_pmdn = chart_gen.create_investment_by_wilayah_chart(
-                        current_investment.pmdn_by_wilayah,
-                        title="Investasi PMDN per Wilayah"
-                    )
-                    st.plotly_chart(fig_inv_wil_pmdn, use_container_width=True)
-            
-            # Narrative for Wilayah charts
-            col1, col2 = st.columns(2)
-            with col1:
-                if current_investment.pma_by_wilayah:
-                    pma_wilayah_narr = narrative_gen.generate_wilayah_narrative(
-                        current_investment.pma_by_wilayah, "PMA"
-                    )
-                    if pma_wilayah_narr:
-                        st.markdown(f'<div class="narrative-box">{pma_wilayah_narr}</div>', unsafe_allow_html=True)
-            with col2:
-                if current_investment.pmdn_by_wilayah:
-                    pmdn_wilayah_narr = narrative_gen.generate_wilayah_narrative(
-                        current_investment.pmdn_by_wilayah, "PMDN"
-                    )
-                    if pmdn_wilayah_narr:
-                        st.markdown(f'<div class="narrative-box">{pmdn_wilayah_narr}</div>', unsafe_allow_html=True)
+                    with col2:
+                        # Project count by Kab/Kota (horizontal bar)
+                        import plotly.graph_objects as go
+                        projects_by_kab = proyek_data.get_period_projects_by_wilayah(months)
+                        if projects_by_kab:
+                            sorted_kab = dict(sorted(projects_by_kab.items(), key=lambda x: x[1], reverse=True)[:15])
+                            fig_kab = go.Figure(data=[go.Bar(
+                                x=list(sorted_kab.values()), 
+                                y=list(sorted_kab.keys()), 
+                                orientation='h', 
+                                marker_color='#3B82F6'
+                            )])
+                            fig_kab.update_layout(
+                                title='Jumlah Proyek per Kabupaten/Kota',
+                                template='plotly_dark',
+                                height=400,
+                                yaxis={'categoryorder': 'total ascending'}
+                            )
+                            st.plotly_chart(fig_kab, use_container_width=True)
             
             st.markdown('<div class="section-title">2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
