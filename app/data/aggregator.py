@@ -91,28 +91,34 @@ class DataAggregator:
         self.loader = DataLoader()
         self.loaded_data: Dict[str, Dict] = {}  # month -> data
     
-    def load_files(self, file_paths: List[Path]) -> None:
+    def load_files(self, file_inputs: List[Any]) -> None:
         """
         Load multiple Excel files and store their data.
         
         Args:
-            file_paths: List of paths to Excel files
+            file_inputs: List of file paths or Streamlit UploadedFile objects
         """
-        for file_path in file_paths:
+        for file_input in file_inputs:
             try:
-                data = self.loader.load_monthly_data(file_path)
+                # Handle Streamlit UploadedFile
+                if hasattr(file_input, 'getvalue') and hasattr(file_input, 'name'):
+                    data = self.loader.load_monthly_data(file_input.getvalue(), filename=file_input.name)
+                    filename_for_log = file_input.name
+                # Handle Path or str
+                else:
+                    data = self.loader.load_monthly_data(file_input)
+                    filename_for_log = str(file_input)
+                
                 month = data.get('month')
                 year = data.get('year')
                 if month and year:
                     key = f"{month}_{year}"
                     self.loaded_data[key] = data
-                    print(f"Loaded: {file_path.name} -> {key}")
+                    print(f"Loaded: {filename_for_log} -> {key}")
                 elif month: # Fallback if year missing
-                     # Try to use current year or 2025 as fallback if not in file
-                     # but really we should have year by now as we fixed the loader
                      self.loaded_data[month] = data # Warning: unsafe
             except Exception as e:
-                print(f"Error loading {file_path}: {e}")
+                print(f"Error loading {file_input}: {e}")
     
     def aggregate_triwulan(self, triwulan: str, year: int) -> PeriodReport:
         """
