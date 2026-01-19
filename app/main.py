@@ -1310,7 +1310,7 @@ def render_report(report, stats: dict):
     # Section: Realisasi Investasi (if data available)
     investment_reports = st.session_state.get('investment_reports', None)
     if investment_reports:
-        st.markdown('<div class="section-title">2. Realisasi Investasi</div>', 
+        st.markdown('<div class="section-title">2. Rencana Proyek</div>', 
                     unsafe_allow_html=True)
         
         # Get current period's investment data
@@ -1353,7 +1353,7 @@ def render_report(report, stats: dict):
                 </div>
                 ''', unsafe_allow_html=True)
             
-            st.markdown('<div class="section-title">2.1 Investasi per Wilayah</div>', 
+            st.markdown('<div class="section-title">2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -1393,7 +1393,7 @@ def render_report(report, stats: dict):
                     if pmdn_wilayah_narr:
                         st.markdown(f'<div class="narrative-box">{pmdn_wilayah_narr}</div>', unsafe_allow_html=True)
             
-            st.markdown('<div class="section-title">2.2 Perbandingan PMA vs PMDN</div>', 
+            st.markdown('<div class="section-title">2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -1462,8 +1462,8 @@ def render_report(report, stats: dict):
     # Section: Rencana Proyek (if TW summary data available)
     tw_summary = st.session_state.get('tw_summary', None)
     if tw_summary:
-        st.markdown('<div class="section-title">3. Rencana Proyek</div>', 
-                    unsafe_allow_html=True)
+        # This section content is now part of Section 2
+        # Removing old Section 3 header since it's merged into Section 2
         
         # Get current period's summary
         periode_name = report.period_name
@@ -1471,7 +1471,7 @@ def render_report(report, stats: dict):
         
         if current_summary:
             # First show monthly project chart (like NIB monthly chart)
-            st.markdown('<div class="section-title">3.1 Jumlah Proyek per Bulan</div>', 
+            st.markdown('<div class="section-title">2.3 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
                         unsafe_allow_html=True)
             
             # Get monthly project data from proyek loader
@@ -1502,7 +1502,7 @@ def render_report(report, stats: dict):
                         st.plotly_chart(fig_monthly, use_container_width=True)
             
             # Skala Usaha visualization (business scale)
-            st.markdown('<div class="section-title">3.2 Jumlah Proyek Berdasarkan Skala Usaha</div>', 
+            st.markdown('<div class="section-title">2.4 Rekapitulasi Data Proyek Berdasarkan Jumlah Investasi</div>', 
                         unsafe_allow_html=True)
             
             if proyek_data:
@@ -1542,7 +1542,7 @@ def render_report(report, stats: dict):
                     st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
             
             # Project count by PM status chart (renamed to 3.3)
-            st.markdown('<div class="section-title">3.3 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
+            st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -1707,6 +1707,89 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
         else:
             st.info(f"Data ringkasan proyek untuk {periode_name} tidak tersedia.")
+    
+    # ===========================================
+    # Section 3: Perizinan Berusaha Berbasis Risiko (PB OSS data)
+    # ===========================================
+    pb_oss_file = st.session_state.get('pb_oss_ref_file')
+    if pb_oss_file:
+        st.markdown('<div class="section-title">3. Perizinan Berusaha Berbasis Risiko Provinsi Lampung</div>', 
+                    unsafe_allow_html=True)
+        
+        # Load PB OSS data using cached loader
+        pb_data = _cached_load_pb_oss(pb_oss_file.getvalue(), pb_oss_file.name, report.year)
+        
+        if pb_data:
+            from app.data.reference_loader import ReferenceDataLoader
+            loader = ReferenceDataLoader()
+            months = loader.get_months_for_period(report.period_type, report.period_name)
+            
+            # 3.1 Period and Location
+            st.markdown('<div class="section-title">3.1 Rekapitulasi Berdasarkan Periode dan Lokasi Usaha di Kabupaten/Kota</div>', 
+                        unsafe_allow_html=True)
+            kab_data = pb_data.get_period_by_kab_kota(months)
+            if kab_data:
+                import plotly.graph_objects as go
+                sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
+                fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
+                fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.2 Status PM
+            st.markdown('<div class="section-title">3.2 Rekapitulasi Berdasarkan Status Penanaman Modal</div>', 
+                        unsafe_allow_html=True)
+            pm_data = pb_data.get_period_status_pm(months)
+            if pm_data:
+                fig = go.Figure(data=[go.Bar(x=list(pm_data.keys()), y=list(pm_data.values()), marker_color=['#10B981', '#F59E0B'][:len(pm_data)])])
+                fig.update_layout(title='Perizinan per Status PM', template='plotly_dark', height=350)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.3 Risk Level
+            st.markdown('<div class="section-title">3.3 Rekapitulasi Berdasarkan Tingkat Risiko</div>', 
+                        unsafe_allow_html=True)
+            risk_data = pb_data.get_period_risk(months)
+            if risk_data:
+                fig = go.Figure(data=[go.Bar(x=list(risk_data.keys()), y=list(risk_data.values()), marker_color=['#22C55E', '#EAB308', '#EF4444', '#8B5CF6'][:len(risk_data)])])
+                fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_dark', height=350)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.4 Sector
+            st.markdown('<div class="section-title">3.4 Rekapitulasi Berdasarkan Sektor Kementerian/Lembaga</div>', 
+                        unsafe_allow_html=True)
+            sector_data = pb_data.get_period_sector(months)
+            if sector_data:
+                sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
+                fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
+                fig.update_layout(title='Perizinan per Sektor (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.5 Jenis Perizinan
+            st.markdown('<div class="section-title">3.5 Rekapitulasi Berdasarkan Jenis Perizinan</div>', 
+                        unsafe_allow_html=True)
+            jenis_data = pb_data.get_period_jenis_perizinan(months)
+            if jenis_data:
+                sorted_jenis = dict(sorted(jenis_data.items(), key=lambda x: x[1], reverse=True)[:10])
+                fig = go.Figure(data=[go.Bar(x=list(sorted_jenis.values()), y=list(sorted_jenis.keys()), orientation='h', marker_color='#06B6D4')])
+                fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.6 Status Perizinan (NO Gubernur filter - all data)
+            st.markdown('<div class="section-title">3.6 Rekapitulasi Berdasarkan Status Respon</div>', 
+                        unsafe_allow_html=True)
+            status_data = pb_data.get_period_status_perizinan(months)
+            if status_data:
+                fig = go.Figure(data=[go.Pie(labels=list(status_data.keys()), values=list(status_data.values()), hole=0.4)])
+                fig.update_layout(title='Perizinan per Status Respon', template='plotly_dark', height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 3.7 Kewenangan (NO Gubernur filter - all data)
+            st.markdown('<div class="section-title">3.7 Rekapitulasi Berdasarkan Kewenangan</div>', 
+                        unsafe_allow_html=True)
+            kew_data = pb_data.get_period_kewenangan(months)
+            if kew_data:
+                fig = go.Figure(data=[go.Bar(x=list(kew_data.keys()), y=list(kew_data.values()), marker_color=['#3B82F6', '#10B981', '#F59E0B'][:len(kew_data)])])
+                fig.update_layout(title='Perizinan per Kewenangan', template='plotly_dark', height=350)
+                st.plotly_chart(fig, use_container_width=True)
     
     # Section: Kesimpulan
     st.markdown('<div class="section-title">Kesimpulan</div>', unsafe_allow_html=True)
