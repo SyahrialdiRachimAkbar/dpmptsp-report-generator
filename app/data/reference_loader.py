@@ -545,7 +545,8 @@ class ReferenceDataLoader:
             status_pm_col = self._find_column(df, ['status pm', 'status_pm'])
             jenis_perizinan_col = self._find_column(df, ['uraian_jenis_perizinan', 'jenis_perizinan', 'jenis perizinan'])
             status_perizinan_col = self._find_column(df, ['status perizinan', 'status_perizinan'])
-            kewenangan_col = self._find_column(df, ['kewenangan'])
+            kewenangan_col = self._find_exact_column(df, 'kewenangan')  # Use exact match to avoid picking uraian_kewenangan
+            uraian_kewenangan_col = self._find_column(df, ['uraian_kewenangan'])  # For Gubernur filter
             
             # First, process kewenangan from FULL unfiltered data for 3.7
             if kewenangan_col:
@@ -564,7 +565,9 @@ class ReferenceDataLoader:
                         result.monthly_status_perizinan[month] = dict(status_counts)
             
             # Now apply Gubernur filter for remaining breakdowns
-            if kewenangan_col:
+            if uraian_kewenangan_col:
+                df = df[df[uraian_kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
+            elif kewenangan_col:
                 df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
             
             # Process per month (Gubernur-filtered data)
@@ -732,6 +735,13 @@ class ReferenceDataLoader:
             for pattern in patterns:
                 if pattern.lower() in col_lower:
                     return col
+        return None
+    
+    def _find_exact_column(self, df: pd.DataFrame, column_name: str) -> Optional[str]:
+        """Find column with exact name match (case-insensitive)."""
+        for col in df.columns:
+            if str(col).lower().strip() == column_name.lower().strip():
+                return col
         return None
     
     def get_months_for_period(self, period_type: str, period: str) -> List[str]:
