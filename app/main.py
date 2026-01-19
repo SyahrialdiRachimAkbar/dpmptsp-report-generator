@@ -1785,6 +1785,43 @@ def render_report(report, stats: dict):
             loader = ReferenceDataLoader()
             months = loader.get_months_for_period(report.period_type, report.period_name)
             
+            # Summary metrics for Section 3
+            total_permits = pb_data.get_period_permits(months)
+            gubernur_permits = sum(pb_data.get_period_by_kab_kota(months).values()) if pb_data.get_period_by_kab_kota(months) else 0
+            status_pm = pb_data.get_period_status_pm(months)
+            pma_permits = status_pm.get('PMA', 0)
+            pmdn_permits = status_pm.get('PMDN', 0)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{total_permits:,}</div>
+                    <div class="metric-label">Total Perizinan</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            with col2:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{gubernur_permits:,}</div>
+                    <div class="metric-label">Kewenangan Gubernur</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            with col3:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{pma_permits:,}</div>
+                    <div class="metric-label">PMA (Asing)</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            with col4:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-value">{pmdn_permits:,}</div>
+                    <div class="metric-label">PMDN (Domestik)</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
             # 3.1 Period and Location
             st.markdown('<div class="section-title">3.1 Rekapitulasi Berdasarkan Periode dan Lokasi Usaha di Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
