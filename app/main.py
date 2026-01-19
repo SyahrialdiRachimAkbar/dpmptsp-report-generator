@@ -1501,8 +1501,48 @@ def render_report(report, stats: dict):
                         )
                         st.plotly_chart(fig_monthly, use_container_width=True)
             
-            # Project count by PM status chart (renamed to 3.2)
-            st.markdown('<div class="section-title">3.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
+            # Skala Usaha visualization (business scale)
+            st.markdown('<div class="section-title">3.2 Jumlah Proyek Berdasarkan Skala Usaha</div>', 
+                        unsafe_allow_html=True)
+            
+            if proyek_data:
+                skala_data = proyek_data.get_period_by_skala_usaha(months) if proyek_data else {}
+                
+                if skala_data:
+                    # Create bar chart for Skala Usaha using Plotly
+                    import plotly.graph_objects as go
+                    
+                    # Define order for skala categories
+                    skala_order = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
+                    ordered_data = {k: skala_data.get(k, 0) for k in skala_order if k in skala_data}
+                    # Add any remaining categories
+                    for k, v in skala_data.items():
+                        if k not in ordered_data:
+                            ordered_data[k] = v
+                    
+                    fig_skala = go.Figure(data=[
+                        go.Bar(
+                            x=list(ordered_data.keys()),
+                            y=list(ordered_data.values()),
+                            marker_color=['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'][:len(ordered_data)],
+                            text=[f'{v:,}' for v in ordered_data.values()],
+                            textposition='outside'
+                        )
+                    ])
+                    fig_skala.update_layout(
+                        title='Jumlah Proyek Berdasarkan Skala Usaha',
+                        xaxis_title='Skala Usaha',
+                        yaxis_title='Jumlah Proyek',
+                        template='plotly_dark',
+                        showlegend=False,
+                        height=400
+                    )
+                    st.plotly_chart(fig_skala, use_container_width=True)
+                else:
+                    st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
+            
+            # Project count by PM status chart (renamed to 3.3)
+            st.markdown('<div class="section-title">3.3 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
@@ -1577,7 +1617,7 @@ def render_report(report, stats: dict):
                 previous_summary = tw_summary.get(previous_tw) if tw_summary else None
                 
                 if previous_summary:
-                    st.markdown('<div class="section-title">3.3 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
+                    st.markdown('<div class="section-title">3.4 Perbandingan Q-o-Q (Quarter-over-Quarter)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Calculate project counts for Q-o-Q
@@ -1621,7 +1661,7 @@ def render_report(report, stats: dict):
                 prev_year_tw = prev_year_summary.get(periode_name)
                 
                 if prev_year_tw:
-                    st.markdown('<div class="section-title">3.4 Perbandingan Y-o-Y (Year-over-Year)</div>', 
+                    st.markdown('<div class="section-title">3.5 Perbandingan Y-o-Y (Year-over-Year)</div>', 
                                 unsafe_allow_html=True)
                     
                     # Estimate project counts for previous year
@@ -1654,7 +1694,7 @@ def render_report(report, stats: dict):
                         st.markdown(f'<div class="narrative-box">{yoy_narr}</div>', unsafe_allow_html=True)
             
             # Project Narrative Interpretation
-            st.markdown('<div class="section-title">3.5 Interpretasi Data Proyek</div>', 
+            st.markdown('<div class="section-title">3.6 Interpretasi Data Proyek</div>', 
                         unsafe_allow_html=True)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
             project_narrative = narrative_gen.generate_project_narrative(

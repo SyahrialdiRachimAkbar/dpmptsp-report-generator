@@ -103,6 +103,7 @@ class ProyekReferenceData:
     monthly_pma_projects: Dict[str, int] = field(default_factory=dict)  # Month → PMA project count
     monthly_pmdn_projects: Dict[str, int] = field(default_factory=dict)  # Month → PMDN project count
     monthly_by_wilayah: Dict[str, Dict[str, float]] = field(default_factory=dict)  # Month → Wilayah → investment
+    monthly_by_skala_usaha: Dict[str, Dict[str, int]] = field(default_factory=dict)  # Month → Skala → project count
     
     def get_period_investment(self, months: List[str]) -> float:
         """Get total investment for specified months."""
@@ -143,6 +144,15 @@ class ProyekReferenceData:
             if month in self.monthly_by_wilayah:
                 for wilayah, investment in self.monthly_by_wilayah[month].items():
                     result[wilayah] = result.get(wilayah, 0) + investment
+        return result
+    
+    def get_period_by_skala_usaha(self, months: List[str]) -> Dict[str, int]:
+        """Get project count by skala usaha for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_by_skala_usaha:
+                for skala, count in self.monthly_by_skala_usaha[month].items():
+                    result[skala] = result.get(skala, 0) + count
         return result
 
 
@@ -517,6 +527,7 @@ class ReferenceDataLoader:
             wilayah_col = self._find_column(df, ['kab kota usaha', 'kab_kota_usaha', 'kab kota', 'kabupaten'])
             tki_col = self._find_column(df, ['tki'])
             tka_col = self._find_column(df, ['tka'])
+            skala_col = self._find_column(df, ['uraian_skala_usaha', 'skala_usaha', 'skala usaha'])
             
             if year is None:
                 year = self.extract_year_from_filename(filename) or 2025
@@ -572,6 +583,11 @@ class ReferenceDataLoader:
                     pmdn_df = month_df[month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
                     result.monthly_pma_projects[month] = len(pma_df)
                     result.monthly_pmdn_projects[month] = len(pmdn_df)
+                
+                # By Skala Usaha (project count by business scale)
+                if skala_col:
+                    skala_counts = month_df[skala_col].value_counts()
+                    result.monthly_by_skala_usaha[month] = dict(skala_counts)
             
             return result
             
