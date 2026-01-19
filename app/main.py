@@ -1887,9 +1887,49 @@ def render_report(report, stats: dict):
             status_data = pb_data.get_period_status_perizinan(months)
             if status_data:
                 import plotly.graph_objects as go
-                fig = go.Figure(data=[go.Pie(labels=list(status_data.keys()), values=list(status_data.values()), hole=0.4)])
-                fig.update_layout(title='Perizinan per Status Respon', template='plotly_dark', height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                
+                col1, col2 = st.columns([1.2, 1])
+                with col1:
+                    # Bar chart for Status Respon
+                    status_colors = {
+                        'Izin Terbit/SS Terverifikasi': '#22C55E',
+                        'Menunggu Verifikasi Persyaratan': '#EAB308', 
+                        'Terbit Otomatis': '#3B82F6'
+                    }
+                    colors = [status_colors.get(k, '#8B5CF6') for k in status_data.keys()]
+                    
+                    fig = go.Figure(data=[go.Bar(
+                        x=list(status_data.keys()), 
+                        y=list(status_data.values()), 
+                        marker_color=colors,
+                        text=[f'{v:,}' for v in status_data.values()],
+                        textposition='outside'
+                    )])
+                    fig.update_layout(
+                        title=f'Jumlah Perizinan Berdasarkan Status Respon<br>Periode {report.period_name} Tahun {report.year}',
+                        template='plotly_dark', 
+                        height=400,
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Narrative interpretation
+                    total_status = sum(status_data.values())
+                    status_items = list(status_data.items())
+                    
+                    narrative = f"""
+                    <b>Rekapitulasi Perizinan Berusaha Berbasis Risiko</b> Kewenangan Gubernur Provinsi Lampung 
+                    periode {report.period_name} Tahun {report.year} berdasarkan Status Respon:<br><br>
+                    """
+                    
+                    for status_name, count in status_items:
+                        pct = count / total_status * 100 if total_status > 0 else 0
+                        narrative += f"• Status <b>{status_name}</b> sebanyak <b>{count:,}</b> pemohon ({pct:.1f}%)<br>"
+                    
+                    narrative += f"<br>Total keseluruhan sebanyak <b>{total_status:,}</b> perizinan."
+                    
+                    st.markdown(f'<div class="narrative-box" style="margin-top: 1rem;">{narrative}</div>', unsafe_allow_html=True)
             
             # 3.7 Kewenangan (NO Gubernur filter - all data, grouped by DPMPTSP)
             st.markdown('<div class="section-title">3.7 Rekapitulasi Berdasarkan Kewenangan</div>', 
