@@ -559,9 +559,7 @@ class ReferenceDataLoader:
                     elif not kewenangan_col and 'kewenangan' in col_lower and 'uraian' not in col_lower:
                         kewenangan_col = col
             
-            # Debug: print what we found
-            print(f"DEBUG: kewenangan_col={kewenangan_col}, uraian_kewenangan_col={uraian_kewenangan_col}")
-            print(f"DEBUG: Sample kewenangan values: {df[kewenangan_col].head(3).tolist() if kewenangan_col else 'N/A'}")
+
             
             # First, process kewenangan from FULL unfiltered data for 3.7
             if kewenangan_col:

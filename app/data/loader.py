@@ -1106,7 +1106,7 @@ class DataLoader:
                     # Target value is usually in column 1
                     try:
                         target_rp = float(df.iloc[idx, 1]) if pd.notna(df.iloc[idx, 1]) else 0
-                    except:
+                    except (ValueError, TypeError):
                         pass
                     break
         
@@ -1139,7 +1139,7 @@ class DataLoader:
                             return 0.0
                         try:
                             return float(val)
-                        except:
+                        except (ValueError, TypeError):
                             return 0.0
                     
                     def safe_int(val):
@@ -1147,7 +1147,7 @@ class DataLoader:
                             return 0
                         try:
                             return int(float(val))
-                        except:
+                        except (ValueError, TypeError):
                             return 0
                     
                     # Get values - adjust indices based on actual structure
