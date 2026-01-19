@@ -1162,8 +1162,9 @@ def render_report(report, stats: dict):
     
     # Summary metrics row
     total_nib = stats.get('total_nib', 0)
-    pma_count = stats.get('by_pm', {}).get('PMA', 0)
-    pmdn_count = stats.get('by_pm', {}).get('PMDN', 0)
+    pm_dist = stats.get('pm_distribution', {})
+    pma_count = pm_dist.get('PMA', 0)
+    pmdn_count = pm_dist.get('PMDN', 0)
     pelaku = stats.get('pelaku_usaha_distribution', {})
     umk_count = pelaku.get('UMK', 0)
     
