@@ -1506,13 +1506,6 @@ def render_report(report, stats: dict):
                     <div class="metric-label">Total Proyek {periode_name}</div>
                 </div>
                 ''', unsafe_allow_html=True)
-                
-                st.markdown(f'''
-                <div class="metric-card" style="margin-top: 1rem;">
-                    <div class="metric-value">{current_summary.percentage:.1f}%</div>
-                    <div class="metric-label">Pencapaian Target</div>
-                </div>
-                ''', unsafe_allow_html=True)
             
             # Q-o-Q Comparison (if previous TW exists)
             tw_order = ["TW I", "TW II", "TW III", "TW IV"]
