@@ -46,8 +46,12 @@ class ChartGenerator:
         'pmdn': '#3498db',        # Blue for PMDN
         
         # Business actor colors (using primary palette)
+        # Business actor colors (using primary palette)
         'umk': '#3d7ea6',         # Secondary blue for UMK
         'non_umk': '#1e3a5f',     # Primary blue for NON-UMK
+        
+        # General UI colors
+        'text': '#333333',        # Dark grey for text labels
         
         # Risk level colors (gradient from green to red)
         'risk_rendah': '#27ae60',          # Green - Low risk
