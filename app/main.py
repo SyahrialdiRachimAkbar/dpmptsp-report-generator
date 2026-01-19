@@ -1939,41 +1939,45 @@ def render_report(report, stats: dict):
                 import plotly.graph_objects as go
                 import pandas as pd
                 
+                # Sort and get top entries for chart (show top 20)
+                sorted_kew = dict(sorted(kew_data.items(), key=lambda x: x[1], reverse=True))
+                top_kew = dict(list(sorted_kew.items())[:20])  # Top 20 for chart
+                
                 col1, col2 = st.columns([1, 1.5])
                 with col1:
-                    # Horizontal bar chart for Kewenangan
-                    sorted_kew = dict(sorted(kew_data.items(), key=lambda x: x[1], reverse=True))
+                    # Horizontal bar chart for top Kewenangan entries
+                    chart_height = max(400, len(top_kew) * 25)  # Dynamic height
                     fig = go.Figure(data=[go.Bar(
-                        x=list(sorted_kew.values()), 
-                        y=list(sorted_kew.keys()), 
+                        x=list(top_kew.values()), 
+                        y=list(top_kew.keys()), 
                         orientation='h',
-                        marker_color=['#22C55E', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444'][:len(sorted_kew)],
-                        text=[f'{v:,}' for v in sorted_kew.values()],
+                        marker_color='#3B82F6',
+                        text=[f'{v:,}' for v in top_kew.values()],
                         textposition='outside'
                     )])
                     fig.update_layout(
-                        title=f'Jumlah Perizinan Berdasarkan Kewenangan<br>Periode {report.period_name} Tahun {report.year}',
+                        title=f'Jumlah Perizinan Berdasarkan Kewenangan (Top 20)<br>Periode {report.period_name} Tahun {report.year}',
                         template='plotly_dark', 
-                        height=400,
-                        yaxis={'categoryorder': 'total ascending'}
+                        height=chart_height,
+                        yaxis={'categoryorder': 'total ascending'},
+                        margin=dict(l=10)
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 
                 with col2:
-                    # Detailed table with numbered rows
+                    # Full detailed table with all entries
                     total = sum(kew_data.values())
                     sorted_items = sorted(kew_data.items(), key=lambda x: x[1], reverse=True)
                     
                     kew_df = pd.DataFrame({
                         'No': range(1, len(sorted_items) + 1),
                         'Kewenangan': [k for k, v in sorted_items],
-                        'Jumlah Perizinan': [f'{v:,}' for k, v in sorted_items],
-                        'Persentase': [f"{v/total*100:.2f}%" for k, v in sorted_items]
+                        'Jumlah': [v for k, v in sorted_items],
+                        '%': [f"{v/total*100:.2f}%" for k, v in sorted_items]
                     })
                     
-                    st.markdown('<div style="margin-top: 0.5rem;">', unsafe_allow_html=True)
-                    st.dataframe(kew_df, use_container_width=True, hide_index=True, height=350)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="margin-bottom: 0.5rem;"><b>Total: {len(sorted_items)} Kewenangan</b></p>', unsafe_allow_html=True)
+                    st.dataframe(kew_df, use_container_width=True, hide_index=True, height=500)
                 
                 # Narrative interpretation
                 top_3 = sorted_items[:3] if len(sorted_items) >= 3 else sorted_items
