@@ -1422,6 +1422,7 @@ def render_report(report, stats: dict):
                                 title="Jumlah Proyek per Bulan",
                                 show_trendline=True
                             )
+                            fig_monthly_proj.update_layout(height=400)
                             st.plotly_chart(fig_monthly_proj, use_container_width=True)
                     
                     with col2:
@@ -1443,6 +1444,20 @@ def render_report(report, stats: dict):
                                 yaxis={'categoryorder': 'total ascending'}
                             )
                             st.plotly_chart(fig_kab, use_container_width=True)
+                    
+                    # Interpretation in Indonesian
+                    total_proyek = sum(monthly_project_data.values()) if monthly_project_data else 0
+                    top_month = max(monthly_project_data.items(), key=lambda x: x[1]) if monthly_project_data else ("", 0)
+                    top_kab = list(sorted_kab.items())[0] if projects_by_kab and sorted_kab else ("", 0)
+                    
+                    interpretation = f"""
+                    <b>Analisis dan Interpretasi:</b><br>
+                    Rekapitulasi data proyek di Provinsi Lampung periode {report.period_name} Tahun {report.year} 
+                    menunjukkan total sebanyak <b>{total_proyek:,}</b> proyek. 
+                    Jumlah proyek tertinggi tercatat pada bulan <b>{top_month[0]}</b> dengan <b>{top_month[1]:,}</b> proyek. 
+                    Berdasarkan lokasi, <b>{top_kab[0]}</b> mencatatkan jumlah proyek tertinggi sebanyak <b>{top_kab[1]:,}</b> proyek.
+                    """
+                    st.markdown(f'<div class="narrative-box">{interpretation}</div>', unsafe_allow_html=True)
             
             st.markdown('<div class="section-title">2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
