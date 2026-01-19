@@ -2004,25 +2004,46 @@ def render_report(report, stats: dict):
                     table_data.append(row)
                 
                 kew_df = pd.DataFrame(table_data)
-                
-                # Display with styled DataFrame
-                styled_df = kew_df.style.set_properties(**{
-                    'background-color': '#0F172A',  # Dark blue background
-                    'color': '#F8FAFC',            # White/Light text
-                    'border-color': '#334155'      # Border color
-                }).format(precision=0, thousands=".")
 
-                st.dataframe(
-                    styled_df, 
-                    use_container_width=True, 
-                    hide_index=True, 
-                    height=min(500, len(sorted_items) * 35 + 40),
-                    column_config={
-                        'No': st.column_config.NumberColumn('NO', width='small'),
-                        'Kewenangan': st.column_config.TextColumn('KEWENANGAN', width='large'),
-                        'JUMLAH': st.column_config.NumberColumn('JUMLAH', format='%d')
-                    }
+                # Display with Plotly Table for better visibility and control
+                header_values = ['<b>NO</b>', '<b>KEWENANGAN</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+                
+                # Prepare column data
+                cell_values = [
+                    kew_df['No'].tolist(),
+                    kew_df['Kewenangan'].tolist()
+                ]
+                for m in months:
+                    cell_values.append(kew_df[m].tolist())
+                cell_values.append(kew_df['JUMLAH'].tolist())
+                
+                # Create table figure
+                table_fig = go.Figure(data=[go.Table(
+                    header=dict(
+                        values=header_values,
+                        fill_color='#1E40AF',  # Blue header
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=12),
+                        height=40
+                    ),
+                    cells=dict(
+                        values=cell_values,
+                        fill_color=['#0F172A', '#1E293B'], # Alternating dark rows
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=11),
+                        height=30,
+                        line_color='#334155'
+                    )
+                )])
+                
+                table_fig.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    height=min(600, len(sorted_items) * 35 + 50),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
                 )
+                
+                st.plotly_chart(table_fig, use_container_width=True)
                 
                 # ========== NARRATIVE INTERPRETATION ==========
                 top_3 = sorted_items[:3] if len(sorted_items) >= 3 else sorted_items
