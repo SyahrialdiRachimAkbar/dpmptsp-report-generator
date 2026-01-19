@@ -2006,8 +2006,14 @@ def render_report(report, stats: dict):
                 kew_df = pd.DataFrame(table_data)
                 
                 # Display with styled DataFrame
+                styled_df = kew_df.style.set_properties(**{
+                    'background-color': '#0F172A',  # Dark blue background
+                    'color': '#F8FAFC',            # White/Light text
+                    'border-color': '#334155'      # Border color
+                }).format(precision=0, thousands=".")
+
                 st.dataframe(
-                    kew_df, 
+                    styled_df, 
                     use_container_width=True, 
                     hide_index=True, 
                     height=min(500, len(sorted_items) * 35 + 40),
