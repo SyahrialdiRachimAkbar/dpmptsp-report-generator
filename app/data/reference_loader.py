@@ -546,15 +546,18 @@ class ReferenceDataLoader:
             jenis_perizinan_col = self._find_column(df, ['uraian_jenis_perizinan', 'jenis_perizinan', 'jenis perizinan'])
             status_perizinan_col = self._find_column(df, ['status perizinan', 'status_perizinan'])
             
-            # Find kewenangan columns - detailed first, then uraian for filter
-            uraian_kewenangan_col = None
-            kewenangan_col = None
-            for col in df.columns:
-                col_lower = str(col).lower().strip()
-                if col_lower == 'uraian_kewenangan':
-                    uraian_kewenangan_col = col
-                elif 'kewenangan' in col_lower and 'uraian' not in col_lower:
-                    kewenangan_col = col
+            # Find kewenangan columns - strict detection first
+            uraian_kewenangan_col = self._find_exact_column(df, 'uraian_kewenangan')
+            kewenangan_col = self._find_exact_column(df, 'kewenangan')
+            
+            # Fallback to fuzzy search if exact match not found
+            if not kewenangan_col or not uraian_kewenangan_col:
+                for col in df.columns:
+                    col_lower = str(col).lower().strip()
+                    if not uraian_kewenangan_col and col_lower == 'uraian_kewenangan':
+                        uraian_kewenangan_col = col
+                    elif not kewenangan_col and 'kewenangan' in col_lower and 'uraian' not in col_lower:
+                        kewenangan_col = col
             
             # Debug: print what we found
             print(f"DEBUG: kewenangan_col={kewenangan_col}, uraian_kewenangan_col={uraian_kewenangan_col}")
