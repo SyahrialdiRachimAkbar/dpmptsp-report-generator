@@ -1633,65 +1633,38 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
                         unsafe_allow_html=True)
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Get project counts from InvestmentReport
-                inv_report = st.session_state.investment_reports.get(periode_name) if st.session_state.investment_reports else None
-                pma_proyek = inv_report.pma_proyek if inv_report else 0
-                pmdn_proyek = inv_report.pmdn_proyek if inv_report else 0
-                
-                # If no per-type data, use total proyek split estimate
-                if pma_proyek == 0 and pmdn_proyek == 0 and current_summary.proyek > 0:
-                    # Estimate based on investment ratio
-                    total_inv = current_summary.pma_rp + current_summary.pmdn_rp
-                    if total_inv > 0:
-                        pma_ratio = current_summary.pma_rp / total_inv
-                        pmdn_ratio = current_summary.pmdn_rp / total_inv
-                        pma_proyek = int(current_summary.proyek * pma_ratio)
-                        pmdn_proyek = current_summary.proyek - pma_proyek
-                
-                fig_project = chart_gen.create_project_count_chart(
-                    pma_proyek=pma_proyek,
-                    pmdn_proyek=pmdn_proyek
-                )
-                st.plotly_chart(fig_project, use_container_width=True)
-            
-            with col2:
-                # Show summary metrics
-                st.markdown(f'''
-                <div class="metric-card">
-                    <div class="metric-value">{current_summary.proyek:,}</div>
-                    <div class="metric-label">Total Proyek {periode_name}</div>
-                </div>
-                ''', unsafe_allow_html=True)
-                
-                # Get top wilayah data for narrative
-                inv_report = st.session_state.investment_reports.get(periode_name) if st.session_state.investment_reports else None
-                top_wilayah_text = ""
-                if inv_report and inv_report.pma_by_wilayah:
-                    # Sort by investment value
-                    sorted_wilayah = sorted(inv_report.pma_by_wilayah, key=lambda x: x.jumlah_rp, reverse=True)[:3]
-                    if sorted_wilayah:
-                        top_entries = [f"<b>{w.name}</b> sebanyak <b>{w.jumlah_rp/1e9:,.0f} M</b>" for w in sorted_wilayah]
-                        top_wilayah_text = f"Proyek tertinggi berada di lokasi {', '.join(top_entries[:2])}" + (f" dan {top_entries[2]}" if len(top_entries) > 2 else "") + "."
-                
-                # Generate comprehensive narrative
-                pma_count = pma_proyek if 'pma_proyek' in dir() else 0
-                pmdn_count = pmdn_proyek if 'pmdn_proyek' in dir() else 0
-                
-                narrative_text = f"""
-                Rekapitulasi jumlah proyek di Provinsi Lampung periode {periode_name} Tahun {current_summary.year} 
-                sebanyak <b>{current_summary.proyek:,}</b> proyek. {top_wilayah_text} 
-                Berdasarkan status penanaman modal, terdapat <b>{pma_count:,}</b> proyek PMA dan 
-                <b>{pmdn_count:,}</b> proyek PMDN.
-                """
-                
-                st.markdown(f'''
-                <div class="narrative-box" style="margin-top: 1rem; font-size: 0.9rem; line-height: 1.6;">
-                    {narrative_text.strip()}
-                </div>
-                ''', unsafe_allow_html=True)
+            if proyek_file and proyek_data:
+                # Labor (TKI+TKA) by Kab/Kota
+                import plotly.graph_objects as go
+                labor_by_wilayah = proyek_data.get_period_labor_by_wilayah(months)
+                if labor_by_wilayah:
+                    sorted_labor = dict(sorted(labor_by_wilayah.items(), key=lambda x: x[1], reverse=True)[:15])
+                    fig_labor = go.Figure(data=[go.Bar(
+                        x=list(sorted_labor.values()), 
+                        y=list(sorted_labor.keys()), 
+                        orientation='h', 
+                        marker_color='#F59E0B'
+                    )])
+                    fig_labor.update_layout(
+                        title='Jumlah Tenaga Kerja per Kabupaten/Kota',
+                        template='plotly_dark',
+                        height=400,
+                        yaxis={'categoryorder': 'total ascending'},
+                        xaxis_title='Jumlah Tenaga Kerja'
+                    )
+                    st.plotly_chart(fig_labor, use_container_width=True)
+                    
+                    # Interpretation
+                    top_labor = list(sorted_labor.items())[0] if sorted_labor else ("", 0)
+                    total_labor = sum(sorted_labor.values())
+                    interpretation_labor = f"""
+                    <b>Analisis dan Interpretasi:</b><br>
+                    <b>{top_labor[0]}</b> mencatatkan penyerapan tenaga kerja tertinggi sebanyak 
+                    <b>{top_labor[1]:,}</b> orang ({top_labor[1]/total_labor*100:.1f}% dari total {total_labor:,} tenaga kerja).
+                    """
+                    st.markdown(f'<div class="narrative-box">{interpretation_labor}</div>', unsafe_allow_html=True)
+                else:
+                    st.info("Data tenaga kerja tidak tersedia dalam file PROYEK.")
             
             # Q-o-Q Comparison (if previous TW exists)
             tw_order = ["TW I", "TW II", "TW III", "TW IV"]
