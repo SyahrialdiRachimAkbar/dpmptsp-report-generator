@@ -1160,6 +1160,42 @@ def render_report(report, stats: dict):
     st.markdown('<div class="section-title">1. Nomor Induk Berusaha</div>', 
                 unsafe_allow_html=True)
     
+    # Summary metrics row
+    total_nib = stats.get('total_nib', 0)
+    pma_count = stats.get('by_pm', {}).get('PMA', 0)
+    pmdn_count = stats.get('by_pm', {}).get('PMDN', 0)
+    umk_count = stats.get('by_skala', {}).get('UMK', 0) if stats.get('by_skala') else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-value">{total_nib:,}</div>
+            <div class="metric-label">Total NIB</div>
+        </div>
+        ''', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-value">{pma_count:,}</div>
+            <div class="metric-label">PMA (Asing)</div>
+        </div>
+        ''', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-value">{pmdn_count:,}</div>
+            <div class="metric-label">PMDN (Domestik)</div>
+        </div>
+        ''', unsafe_allow_html=True)
+    with col4:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-value">{umk_count:,}</div>
+            <div class="metric-label">UMK</div>
+        </div>
+        ''', unsafe_allow_html=True)
+    
     # 1.1 Rekapitulasi Data NIB
     st.markdown('<div class="section-title">1.1 Rekapitulasi Data NIB</div>', 
                 unsafe_allow_html=True)
