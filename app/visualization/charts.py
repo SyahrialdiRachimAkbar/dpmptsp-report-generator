@@ -207,10 +207,13 @@ class ChartGenerator:
             x=[current_label],
             y=[current_total],
             name=current_label,
-            marker_color=self.COLORS['primary'],
+            # Use semi-transparent blue for current year to match reference style
+            marker_color='rgba(54, 162, 235, 0.7)', 
+            marker_line_color='rgba(54, 162, 235, 1.0)',
+            marker_line_width=1.5,
             text=[f"{current_total:,}"],
             textposition='outside',
-            textfont={'size': 14, 'color': self.COLORS['primary']},
+            textfont={'size': 14, 'color': self.COLORS['text']},
         ))
         
         # Previous quarter (if available)
@@ -220,10 +223,13 @@ class ChartGenerator:
                 x=[previous_label],
                 y=[previous_total],
                 name=previous_label,
-                marker_color=self.COLORS['tertiary'],
+                # Use semi-transparent orange/tertiary for previous year
+                marker_color='rgba(255, 159, 64, 0.7)',
+                marker_line_color='rgba(255, 159, 64, 1.0)',
+                marker_line_width=1.5,
                 text=[f"{previous_total:,}"],
                 textposition='outside',
-                textfont={'size': 14, 'color': self.COLORS['tertiary']},
+                textfont={'size': 14, 'color': self.COLORS['text']},
             ))
             
             # Calculate change percentage

@@ -1240,33 +1240,84 @@ def render_report(report, stats: dict):
     st.markdown('<div class="section-title">1.1 Rekapitulasi Data NIB</div>', 
                 unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # === Load Previous Year Data for Comparison ===
+    prev_nib_file = st.session_state.get('nib_prev_ref_file')
+    if prev_nib_file:
+         aggregator.load_files([prev_nib_file])
+
+    # === comparison logic ===
+    # 1. Get current report for the selected period
+    current_report = (
+        aggregator.aggregate_triwulan(report.period_name, report.year)
+        if report.period_type == "Triwulan"
+        else aggregator.aggregate_tahunan(report.year)
+    )
+
+    # 2. Get Y-o-Y Comparison (Same period, previous year)
+    prev_year_report = None
+    yoy_change = None
+    if prev_nib_file:
+        prev_year_report = (
+            aggregator.aggregate_triwulan(report.period_name, report.year - 1)
+            if report.period_type == "Triwulan"
+            else aggregator.aggregate_tahunan(report.year - 1)
+        )
+        if prev_year_report.total_nib > 0 and current_report.total_nib > 0:
+             yoy_change = ((current_report.total_nib - prev_year_report.total_nib) / prev_year_report.total_nib) * 100
+
+    # 3. Get Q-o-Q Comparison (Previous period, same year - or prev year if needed)
+    # Note: get_qoq_comparison in aggregator mostly handles this logic for us
+    # but we need to ensure files are loaded. As we loaded main file, it might contain prev months.
+    # If not, we might be limited. But let's use what we have.
+    _, prev_q_report, qoq_change = aggregator.get_qoq_comparison(report.period_name, report.year)
     
-    with col1:
+    # === Top Row: Monthly Chart + Narrative ===
+    col_top_left, col_top_right = st.columns([1, 1])
+    
+    with col_top_left:
         # Monthly bar chart with trendline
         monthly_data = stats.get('monthly_totals', {})
         if monthly_data:
             fig_monthly = chart_gen.create_monthly_bar_with_trendline(
                 monthly_data,
-                title="NIB per Bulan",
-                show_trendline=True
+                f"JUMLAH NIB PER-BULAN TAHUN {report.year}\nDI PROVINSI JAWA BARAT" # Label from image
             )
             st.plotly_chart(fig_monthly, use_container_width=True)
+            
+    with col_top_right:
+        st.markdown(f'<div class="narrative-box">{narratives.nib_overview}</div>', 
+                    unsafe_allow_html=True)
+
+    # === Bottom Row: Y-o-Y + Q-o-Q ===
+    col_btm_left, col_btm_right = st.columns(2)
     
-    with col2:
-        # Q-o-Q comparison
-        if stats.get('prev_period_total'):
-            prev_data = {'prev': stats['prev_period_total']}
-            current_data = {'current': stats['total_nib']}
-            fig_qoq = chart_gen.create_qoq_comparison_bar(
-                current_data=current_data,
-                previous_data=prev_data,
-                current_label=report.period_name,
-                previous_label="Periode Sebelumnya"
-            )
-            st.plotly_chart(fig_qoq, use_container_width=True)
+    with col_btm_left:
+        # Y-o-Y Chart
+        if prev_year_report:
+             fig_yoy = chart_gen.create_qoq_comparison_bar(
+                current_data={f"{report.period_name} {report.year}": current_report.total_nib},
+                previous_data={f"{report.period_name} {report.year-1}": prev_year_report.total_nib},
+                current_label=f"{report.period_name} {report.year}",
+                previous_label=f"{report.period_name} {report.year-1}",
+                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {report.period_name} {report.year-1} & {report.period_name} {report.year} (y-o-y)"
+             )
+             st.plotly_chart(fig_yoy, use_container_width=True)
         else:
-            st.info("Data periode sebelumnya tidak tersedia untuk perbandingan Q-o-Q")
+             st.info("Upload file tahun sebelumnya untuk melihat perbandingan Y-o-Y")
+
+    with col_btm_right:
+        # Q-o-Q Chart
+        if prev_q_report:
+             fig_qoq = chart_gen.create_qoq_comparison_bar(
+                current_data={f"{report.period_name} {report.year}": current_report.total_nib},
+                previous_data={f"{prev_q_report.period_name} {prev_q_report.year}": prev_q_report.total_nib},
+                current_label=f"{report.period_name} {report.year}",
+                previous_label=f"{prev_q_report.period_name} {prev_q_report.year}",
+                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {prev_q_report.period_name} {prev_q_report.year} & {report.period_name} {report.year} (q-o-q)"
+             )
+             st.plotly_chart(fig_qoq, use_container_width=True)
+        else:
+             st.info("Data triwulan sebelumnya tidak tersedia untuk perbandingan Q-o-Q")
     
     st.markdown(f'<div class="narrative-box">{narratives.rekapitulasi_nib}</div>', 
                 unsafe_allow_html=True)

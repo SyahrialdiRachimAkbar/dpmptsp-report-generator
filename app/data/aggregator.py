@@ -102,9 +102,15 @@ class DataAggregator:
             try:
                 data = self.loader.load_monthly_data(file_path)
                 month = data.get('month')
-                if month:
-                    self.loaded_data[month] = data
-                    print(f"Loaded: {file_path.name} -> {month}")
+                year = data.get('year')
+                if month and year:
+                    key = f"{month}_{year}"
+                    self.loaded_data[key] = data
+                    print(f"Loaded: {file_path.name} -> {key}")
+                elif month: # Fallback if year missing
+                     # Try to use current year or 2025 as fallback if not in file
+                     # but really we should have year by now as we fixed the loader
+                     self.loaded_data[month] = data # Warning: unsafe
             except Exception as e:
                 print(f"Error loading {file_path}: {e}")
     
@@ -199,7 +205,14 @@ class DataAggregator:
         )
         
         for month in months:
-            month_data = self.loaded_data.get(month)
+            # Try specific year first
+            key = f"{month}_{year}"
+            month_data = self.loaded_data.get(key)
+            
+            # Fallback to old behavior (just month) if not found (backward compat)
+            if not month_data:
+                month_data = self.loaded_data.get(month)
+            
             if not month_data:
                 continue
             
