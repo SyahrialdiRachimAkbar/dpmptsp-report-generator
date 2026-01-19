@@ -1398,6 +1398,29 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
             
+            # Monthly project chart
+            proyek_file = st.session_state.get('proyek_ref_file')
+            if proyek_file:
+                from app.data.reference_loader import ReferenceDataLoader
+                loader = ReferenceDataLoader()
+                months = loader.get_months_for_period(report.period_type, report.period_name)
+                proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
+                
+                if proyek_data:
+                    # Build monthly project data for chart
+                    monthly_project_data = {}
+                    for month in months:
+                        if month in proyek_data.monthly_projects:
+                            monthly_project_data[month] = proyek_data.monthly_projects[month]
+                    
+                    if monthly_project_data:
+                        fig_monthly_proj = chart_gen.create_monthly_bar_with_trendline(
+                            monthly_project_data,
+                            title="Jumlah Proyek per Bulan",
+                            show_trendline=True
+                        )
+                        st.plotly_chart(fig_monthly_proj, use_container_width=True)
+            
             col1, col2 = st.columns(2)
             
             with col1:
