@@ -1242,51 +1242,75 @@ def render_report(report, stats: dict):
     
     # === Load Previous Year Data for Comparison ===
     # === Load Previous Year Data for Comparison ===
-    # We need a new aggregator instance here to handle the refined stats calculations
+    # Use ReferenceDataLoader because NIB files are Reference/Master files, not PB OSS files
+    from app.data.reference_loader import ReferenceDataLoader
+    from app.config import TRIWULAN_KE_BULAN
+    
+    ref_loader = ReferenceDataLoader()
+    
     current_nib_file = st.session_state.get('nib_ref_file')
     prev_nib_file = st.session_state.get('nib_prev_ref_file')
     
-    # Initialize separate aggregator for on-the-fly comparisons if needed
-    # (Note: we could also pass this from process_data, but recreating it ensures we have exact file state)
-    aggregator = DataAggregator()
-    
-    files_to_load = []
+    # 1. Load Full Data for Current and Previous Year
+    current_full_data = None
     if current_nib_file:
-         files_to_load.append(current_nib_file)
+         try:
+             current_full_data = ref_loader.load_nib(current_nib_file.getvalue(), current_nib_file.name)
+         except Exception as e:
+             st.error(f"Error loading current NIB file: {e}")
+
+    prev_full_data = None
     if prev_nib_file:
-         files_to_load.append(prev_nib_file)
-         
-    if files_to_load:
-         aggregator.load_files(files_to_load)
+         try:
+             prev_full_data = ref_loader.load_nib(prev_nib_file.getvalue(), prev_nib_file.name)
+         except Exception as e:
+             st.error(f"Error loading previous NIB file: {e}")
 
-    # === comparison logic ===
-    # 1. Get current report for the selected period
-    current_report = (
-        aggregator.aggregate_triwulan(report.period_name, report.year)
-        if report.period_type == "Triwulan"
-        else aggregator.aggregate_tahunan(report.year)
-    )
+    # 2. Determine Target Months
+    target_months = []
+    if report.period_type == "Triwulan" and report.period_name in TRIWULAN_KE_BULAN:
+        target_months = TRIWULAN_KE_BULAN[report.period_name]
+    elif report.period_type == "Tahunan":
+        target_months = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
 
-    # 2. Get Y-o-Y Comparison (Same period, previous year)
-    prev_year_report = None
-    yoy_change = None
-    if prev_nib_file:
-        prev_year_report = (
-            aggregator.aggregate_triwulan(report.period_name, report.year - 1)
-            if report.period_type == "Triwulan"
-            else aggregator.aggregate_tahunan(report.year - 1)
-        )
-        if prev_year_report.total_nib > 0 and current_report.total_nib > 0:
-             yoy_change = ((current_report.total_nib - prev_year_report.total_nib) / prev_year_report.total_nib) * 100
+    # 3. Calculate Totals
+    # Current Period
+    current_total = 0
+    if current_full_data:
+        current_total = sum(current_full_data.monthly_totals.get(m, 0) for m in target_months)
+        
+    # Previous Year (Y-o-Y)
+    prev_year_total = 0
+    if prev_full_data:
+        prev_year_total = sum(prev_full_data.monthly_totals.get(m, 0) for m in target_months)
 
-    # 3. Get Q-o-Q Comparison (Previous period, same year - or prev year if needed)
-    # Note: get_qoq_comparison in aggregator mostly handles this logic for us
-    # but we need to ensure files are loaded. As we loaded main file, it might contain prev months.
-    # If not, we might be limited. But let's use what we have.
-    prev_q_report = None
-    qoq_change = None
+    # Previous Quarter (Q-o-Q)
+    prev_q_total = 0
+    prev_q_label = ""
+    has_prev_q_data = False
+    
     if report.period_type == "Triwulan":
-        _, prev_q_report, qoq_change = aggregator.get_qoq_comparison(report.period_name, report.year)
+        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
+        try:
+            curr_idx = tw_list.index(report.period_name)
+            if curr_idx > 0:
+                # Same year, prev quarter
+                prev_q_name = tw_list[curr_idx - 1]
+                prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
+                if current_full_data:
+                    prev_q_total = sum(current_full_data.monthly_totals.get(m, 0) for m in prev_q_months)
+                    has_prev_q_data = True
+                prev_q_label = f"{prev_q_name} {report.year}"
+            else:
+                # Prev year, TW IV
+                prev_q_name = "TW IV"
+                prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
+                if prev_full_data:
+                     prev_q_total = sum(prev_full_data.monthly_totals.get(m, 0) for m in prev_q_months)
+                     has_prev_q_data = True
+                prev_q_label = f"{prev_q_name} {report.year - 1}"
+        except ValueError:
+            pass
     
     # === Top Row: Monthly Chart + Narrative ===
     col_top_left, col_top_right = st.columns([1, 1])
@@ -1310,10 +1334,10 @@ def render_report(report, stats: dict):
     
     with col_btm_left:
         # Y-o-Y Chart
-        if prev_year_report:
+        if prev_full_data:
              fig_yoy = chart_gen.create_qoq_comparison_bar(
-                current_data={f"{report.period_name} {report.year}": current_report.total_nib},
-                previous_data={f"{report.period_name} {report.year-1}": prev_year_report.total_nib},
+                current_data={f"{report.period_name} {report.year}": current_total},
+                previous_data={f"{report.period_name} {report.year-1}": prev_year_total},
                 current_label=f"{report.period_name} {report.year}",
                 previous_label=f"{report.period_name} {report.year-1}",
                 title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {report.period_name} {report.year-1} & {report.period_name} {report.year} (y-o-y)"
@@ -1324,13 +1348,13 @@ def render_report(report, stats: dict):
 
     with col_btm_right:
         # Q-o-Q Chart
-        if prev_q_report:
+        if has_prev_q_data:
              fig_qoq = chart_gen.create_qoq_comparison_bar(
-                current_data={f"{report.period_name} {report.year}": current_report.total_nib},
-                previous_data={f"{prev_q_report.period_name} {prev_q_report.year}": prev_q_report.total_nib},
+                current_data={f"{report.period_name} {report.year}": current_total},
+                previous_data={prev_q_label: prev_q_total},
                 current_label=f"{report.period_name} {report.year}",
-                previous_label=f"{prev_q_report.period_name} {prev_q_report.year}",
-                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {prev_q_report.period_name} {prev_q_report.year} & {report.period_name} {report.year} (q-o-q)"
+                previous_label=prev_q_label,
+                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
              )
              st.plotly_chart(fig_qoq, use_container_width=True)
         else:
