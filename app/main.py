@@ -1499,7 +1499,7 @@ def render_report(report, stats: dict):
             
             # TW Comparison chart (if multiple TW data available)
             if len(investment_reports) > 1:
-                st.markdown('<div class="section-title">2.3 Perbandingan Antar Triwulan</div>', 
+                st.markdown('<div class="section-title">2.3 Perbandingan Antar Triwulan (Investasi)</div>', 
                             unsafe_allow_html=True)
                 fig_tw_comp = chart_gen.create_investment_tw_comparison_chart(investment_reports)
                 st.plotly_chart(fig_tw_comp, use_container_width=True)
@@ -1537,7 +1537,7 @@ def render_report(report, stats: dict):
         
         if current_summary:
             # First show monthly project chart (like NIB monthly chart)
-            st.markdown('<div class="section-title">2.3 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
+            st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
                         unsafe_allow_html=True)
             
             # Get monthly project data from proyek loader
@@ -1568,7 +1568,7 @@ def render_report(report, stats: dict):
                         st.plotly_chart(fig_monthly, use_container_width=True)
             
             # Skala Usaha visualization (business scale)
-            st.markdown('<div class="section-title">2.4 Rekapitulasi Data Proyek Berdasarkan Jumlah Investasi</div>', 
+            st.markdown('<div class="section-title">2.6 Rekapitulasi Data Proyek Berdasarkan Jumlah Investasi</div>', 
                         unsafe_allow_html=True)
             
             if proyek_data:
@@ -1608,7 +1608,7 @@ def render_report(report, stats: dict):
                     st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
             
             # Project count by PM status chart (renamed to 3.3)
-            st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
+            st.markdown('<div class="section-title">2.7 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
                         unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
