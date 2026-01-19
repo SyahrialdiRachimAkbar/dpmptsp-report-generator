@@ -1499,7 +1499,7 @@ def render_report(report, stats: dict):
             
             # TW Comparison chart (if multiple TW data available)
             if len(investment_reports) > 1:
-                st.markdown('<div class="section-title">2.3 Perbandingan Antar Triwulan (Investasi)</div>', 
+                st.markdown('<div class="section-title">Perbandingan Antar Triwulan (Investasi)</div>', 
                             unsafe_allow_html=True)
                 fig_tw_comp = chart_gen.create_investment_tw_comparison_chart(investment_reports)
                 st.plotly_chart(fig_tw_comp, use_container_width=True)
@@ -1510,7 +1510,7 @@ def render_report(report, stats: dict):
                     st.markdown(f'<div class="narrative-box">{tw_comp_narr}</div>', unsafe_allow_html=True)
             
             # Investment Narrative Interpretation
-            st.markdown('<div class="section-title">2.4 Interpretasi Data Investasi</div>', 
+            st.markdown('<div class="section-title">Interpretasi Data Investasi</div>', 
                         unsafe_allow_html=True)
             tw_summary_data = st.session_state.get('tw_summary', None)
             prev_year_data = st.session_state.get('prev_year_tw_summary', None)
