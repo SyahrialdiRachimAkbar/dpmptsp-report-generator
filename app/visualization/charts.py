@@ -544,6 +544,102 @@ class ChartGenerator:
         )
         
         return fig
+
+    def create_pelaku_grouped_comparison(
+        self,
+        current_umk: int,
+        current_non_umk: int,
+        prev_umk: int,
+        prev_non_umk: int,
+        current_label: str,
+        prev_label: str,
+        title: str = "Perbandingan Kategori Pelaku Usaha"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart comparing UMK and NON-UMK between two periods.
+        
+        Args:
+            current_umk: Current period UMK count
+            current_non_umk: Current period NON-UMK count
+            prev_umk: Previous period UMK count
+            prev_non_umk: Previous period NON-UMK count
+            current_label: Label for current period
+            prev_label: Label for previous period
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        categories = ['NON-UMK', 'UMK']
+        
+        # Values must align: [NON-UMK, UMK]
+        prev_values = [prev_non_umk, prev_umk]
+        current_values = [current_non_umk, current_umk]
+        
+        # Calculate percentage changes
+        def calc_pct_change(curr, prev):
+            if prev == 0:
+                return 100.0 if curr > 0 else 0.0
+            return ((curr - prev) / prev) * 100
+        
+        non_umk_pct = calc_pct_change(current_non_umk, prev_non_umk)
+        umk_pct = calc_pct_change(current_umk, prev_umk)
+        pct_changes = [non_umk_pct, umk_pct]
+        
+        fig = go.Figure()
+        
+        # Previous period bars (orange/secondary)
+        fig.add_trace(go.Bar(
+            name=prev_label,
+            x=categories,
+            y=prev_values,
+            text=[f"{v:,}".replace(",", ".") for v in prev_values],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)', 
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Current period bars (green/primary)
+        fig.add_trace(go.Bar(
+            name=current_label,
+            x=categories,
+            y=current_values,
+            text=[f"{v:,}".replace(",", ".") for v in current_values],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)',
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Add percentage change annotations
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#2ecc71' if pct >= 0 else '#e74c3c'
+            arrow = '↑' if pct >= 0 else '↓'
+            if prev_values[i] == 0:
+                annot_text = "N/A" if pct == 0 else f"{arrow}100%"
+            else:
+                annot_text = f"{arrow}{abs(pct):.2f}%"
+                
+            fig.add_annotation(
+                x=cat,
+                y=max(prev_values[i], current_values[i]) * 1.15,
+                text=annot_text,
+                showarrow=False,
+                font={'size': 12, 'color': color, 'weight': 'bold'}
+            )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': ''},
+            yaxis={'title': 'Jumlah NIB'},
+            width=self.width,
+            height=self.height,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        
+        return fig
     
     def create_pelaku_usaha_chart(
         self,
@@ -593,6 +689,69 @@ class ChartGenerator:
         max_val = max(values) if values else 0
         fig.update_yaxes(range=[0, max_val * 1.3], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#e8eaed'}, tickfont={'color': '#e8eaed'})
         fig.update_xaxes(tickfont={'color': '#e8eaed'})
+        
+        return fig
+
+    def create_pelaku_usaha_horizontal_bar(
+        self,
+        umk_total: int,
+        non_umk_total: int,
+        title: str = "Kategori Pelaku Usaha"
+    ) -> go.Figure:
+        """
+        Create horizontal bar chart for UMK vs NON-UMK distribution.
+        
+        Args:
+            umk_total: Total UMK count
+            non_umk_total: Total NON-UMK count
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object with horizontal bars
+        """
+        # UMK on top per reference image? Reference shows UMK on right for grouped, 
+        # but for horizontal distribution generally larger on top or specific order.
+        # Let's put UMK on top (first in list for horizontal usually means bottom unless reversed, 
+        # but let's stick to standard order: NON-UMK, UMK)
+        categories = ['NON-UMK', 'UMK']
+        values = [non_umk_total, umk_total]
+        
+        fig = go.Figure()
+        
+        # NON-UMK bar (orange / secondary)
+        fig.add_trace(go.Bar(
+            name='NON-UMK',
+            y=['NON-UMK'],
+            x=[non_umk_total],
+            orientation='h',
+            text=[f"{non_umk_total:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)', # Orange
+            textfont={'size': 14, 'color': self.COLORS['text']}
+        ))
+        
+        # UMK bar (green / primary)
+        fig.add_trace(go.Bar(
+            name='UMK',
+            y=['UMK'],
+            x=[umk_total],
+            orientation='h',
+            text=[f"{umk_total:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='#2ecc71', # Green
+            textfont={'size': 14, 'color': self.COLORS['text']}
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            xaxis={'title': 'Jumlah NIB'},
+            yaxis={'title': ''},
+            width=self.width,
+            height=300,
+            showlegend=False,
+            barmode='group',
+            **self.layout_defaults
+        )
         
         return fig
     

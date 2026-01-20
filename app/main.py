@@ -1638,30 +1638,170 @@ def render_report(report, stats: dict):
     st.markdown(f'<div class="narrative-box">{narratives.status_pm}</div>', 
                 unsafe_allow_html=True)
     
-    # Section 5: Pelaku Usaha
-    st.markdown('<div class="section-title">1.4 Kategori Pelaku Usaha</div>', 
+    # Section 1.4: Pelaku Usaha - Redesigned Layout
+    st.markdown('<div class="section-title">1.4 Rekapitulasi Data NIB Berdasarkan Pelaku Usaha</div>', 
                 unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # Get Pelaku Usaha distribution from stats
+    pelaku_dist = stats.get('pelaku_usaha_distribution', {})
+    current_umk = pelaku_dist.get('UMK', 0)
+    current_non_umk = pelaku_dist.get('NON_UMK', 0)
     
-    with col1:
-        pelaku = stats.get('pelaku_usaha_distribution', {})
-        fig_pelaku = chart_gen.create_pelaku_usaha_chart(
-            umk_total=pelaku.get('UMK', 0),
-            non_umk_total=pelaku.get('NON_UMK', 0)
+    # Helper to aggregate Skala Usaha (Mikro+Kecil -> UMK, Menengah+Besar -> NON-UMK)
+    def aggregate_pelaku_usaha(full_data_obj, months_list):
+        if not full_data_obj:
+            return 0, 0
+        skala_data = full_data_obj.get_period_by_skala_usaha(months_list)
+        # Normalize keys to title case just in case
+        normalized_data = {k.title(): v for k, v in skala_data.items()}
+        
+        umk_val = normalized_data.get('Mikro', 0) + normalized_data.get('Kecil', 0)
+        # Check for direct 'UMK' key if data source differs
+        if 'Umk' in normalized_data:
+            umk_val += normalized_data['Umk']
+            
+        non_umk_val = normalized_data.get('Menengah', 0) + normalized_data.get('Besar', 0)
+        # Check for direct 'NON-UMK' or 'Non-Umk' key
+        if 'Non-Umk' in normalized_data:
+            non_umk_val += normalized_data['Non-Umk']
+        elif 'Non Umk' in normalized_data:
+            non_umk_val += normalized_data['Non Umk']
+            
+        return umk_val, non_umk_val
+
+    # Calculate TW-level Pelaku Usaha data for comparisons
+    tw1_umk, tw1_non_umk, tw2_umk, tw2_non_umk = 0, 0, 0, 0
+    prev_year_tw_umk, prev_year_tw_non_umk = 0, 0
+    
+    if report.period_type == "Semester" and report.period_name == "Semester I":
+        tw1_months = TRIWULAN_KE_BULAN["TW I"]
+        tw2_months = TRIWULAN_KE_BULAN["TW II"]
+        
+        if current_full_data:
+            tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, tw1_months)
+            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, tw2_months)
+        
+        if prev_full_data:
+            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, tw2_months)
+            
+    elif report.period_type == "Semester" and report.period_name == "Semester II":
+        tw3_months = TRIWULAN_KE_BULAN["TW III"]
+        tw4_months = TRIWULAN_KE_BULAN["TW IV"]
+        
+        if current_full_data:
+            tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, tw3_months) # Using tw1 var for first TW 
+            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, tw4_months) # Using tw2 var for second TW
+        
+        if prev_full_data:
+            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, tw4_months)
+    
+    elif report.period_type == "Triwulan":
+        if current_full_data:
+            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, target_months)
+        
+        if has_prev_q_data and current_full_data:
+            if prev_q_label.startswith("TW"):
+                tw_name = " ".join(prev_q_label.split()[:2])
+                if tw_name in TRIWULAN_KE_BULAN:
+                    tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, TRIWULAN_KE_BULAN[tw_name])
+        
+        if prev_full_data:
+            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, target_months)
+
+    # === Row 1: Pelaku Usaha Bar Chart + Table ===
+    col_pelaku1, col_pelaku2 = st.columns([1, 1.5])
+    
+    with col_pelaku1:
+        # Horizontal bar chart
+        fig_pelaku_bar = chart_gen.create_pelaku_usaha_horizontal_bar(
+            umk_total=current_umk,
+            non_umk_total=current_non_umk,
+            title=f"Kategori Pelaku Usaha - {report.period_name} {report.year}"
         )
-        st.plotly_chart(fig_pelaku, use_container_width=True)
+        st.plotly_chart(fig_pelaku_bar, use_container_width=True)
     
-    with col2:
-        # Pelaku usaha table
-        if not df.empty:
-            pelaku_df = df[['Kabupaten/Kota', 'UMK', 'NON-UMK']]
-            st.markdown(df_to_html_table(pelaku_df), unsafe_allow_html=True)
+    with col_pelaku2:
+        # Detailed table with Per-District breakdown
+        if not df.empty and 'Kabupaten/Kota' in df.columns:
+            # Check if we have UMK/NON-UMK columns
+            pelaku_cols = ['Kabupaten/Kota', 'UMK', 'NON-UMK', 'Total']
+            # If columns might be named 'NON_UMK' (underscore), handle that
+            available_cols = df.columns.tolist()
+            non_umk_col = 'NON_UMK' if 'NON_UMK' in available_cols else 'NON-UMK'
+            
+            if 'UMK' in available_cols and non_umk_col in available_cols:
+                pelaku_df = df[['Kabupaten/Kota', 'UMK', non_umk_col]].copy()
+                if non_umk_col != 'NON-UMK':
+                    pelaku_df = pelaku_df.rename(columns={non_umk_col: 'NON-UMK'})
+                pelaku_df['Total'] = pelaku_df['UMK'] + pelaku_df['NON-UMK']
+                st.markdown(df_to_html_table(pelaku_df, max_rows=15), unsafe_allow_html=True)
     
-    st.markdown(f'<div class="narrative-box">{narratives.pelaku_usaha}</div>', 
-                unsafe_allow_html=True)
+    # === Row 2: Y-o-Y and Q-o-Q Pelaku Usaha Comparisons ===
+    col_pelaku_yoy, col_pelaku_qoq = st.columns(2)
     
-    # Section 6: Sektor & Risiko (if data available)
+    with col_pelaku_yoy:
+        # Y-o-Y Comparison
+        if prev_full_data and (prev_year_tw_umk > 0 or prev_year_tw_non_umk > 0):
+            if report.period_type == "Semester":
+                if report.period_name == "Semester I":
+                    yoy_title = f"Kategori Pelaku Usaha: TW II {report.year - 1} vs TW II {report.year} (Y-o-Y)"
+                    curr_label = f"TW II {report.year}"
+                    prev_label = f"TW II {report.year - 1}"
+                    yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
+                else:
+                    yoy_title = f"Kategori Pelaku Usaha: TW IV {report.year - 1} vs TW IV {report.year} (Y-o-Y)"
+                    curr_label = f"TW IV {report.year}"
+                    prev_label = f"TW IV {report.year - 1}"
+                    yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
+            else:
+                yoy_title = f"Kategori Pelaku Usaha: {report.period_name} {report.year - 1} vs {report.year} (Y-o-Y)"
+                curr_label = f"{report.period_name} {report.year}"
+                prev_label = f"{report.period_name} {report.year - 1}"
+                yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
+            
+            fig_pelaku_yoy = chart_gen.create_pelaku_grouped_comparison(
+                current_umk=yoy_curr_umk,
+                current_non_umk=yoy_curr_non_umk,
+                prev_umk=prev_year_tw_umk,
+                prev_non_umk=prev_year_tw_non_umk,
+                current_label=curr_label,
+                prev_label=prev_label,
+                title=yoy_title
+            )
+            st.plotly_chart(fig_pelaku_yoy, use_container_width=True)
+            
+        else:
+            st.info("Upload file triwulan tahun sebelumnya untuk Y-o-Y")
+    
+    with col_pelaku_qoq:
+        # Q-o-Q Comparison
+        if tw1_umk > 0 or tw1_non_umk > 0 or tw2_umk > 0 or tw2_non_umk > 0:
+            if report.period_type == "Semester":
+                if report.period_name == "Semester I":
+                    qoq_title = f"Kategori Pelaku Usaha: TW I vs TW II {report.year} (Q-o-Q)"
+                    curr_label = f"TW II {report.year}"
+                    prev_label = f"TW I {report.year}"
+                else:
+                    qoq_title = f"Kategori Pelaku Usaha: TW III vs TW IV {report.year} (Q-o-Q)"
+                    curr_label = f"TW IV {report.year}"
+                    prev_label = f"TW III {report.year}"
+            else:
+                qoq_title = f"Kategori Pelaku Usaha: {prev_q_label} vs {report.period_name} {report.year} (Q-o-Q)"
+                curr_label = f"{report.period_name} {report.year}"
+                prev_label = prev_q_label
+            
+            fig_pelaku_qoq = chart_gen.create_pelaku_grouped_comparison(
+                current_umk=tw2_umk,
+                current_non_umk=tw2_non_umk,
+                prev_umk=tw1_umk,
+                prev_non_umk=tw1_non_umk,
+                current_label=curr_label,
+                prev_label=prev_label,
+                title=qoq_title
+            )
+            st.plotly_chart(fig_pelaku_qoq, use_container_width=True)
+        else:
+            st.info("Data triwulan sebelumnya tidak tersedia untuk Q-o-Q")
     sektor_risiko_data = stats.get('sektor_risiko', {})
     if sektor_risiko_data:
         st.markdown('<div class="section-title">1.5 Perizinan Berdasarkan Risiko dan Sektor</div>', 
