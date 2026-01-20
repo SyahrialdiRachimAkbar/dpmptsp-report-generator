@@ -1485,7 +1485,7 @@ def render_report(report, stats: dict):
         fig_pm_bar = chart_gen.create_pm_comparison_chart(
             pma_total=current_pma,
             pmdn_total=current_pmdn,
-            title=f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {report.period_name.upper()} {report.year}"
+            title=f"Status PM - {report.period_name} {report.year}"
         )
         st.plotly_chart(fig_pm_bar, use_container_width=True)
     
@@ -1507,17 +1507,17 @@ def render_report(report, stats: dict):
         if prev_full_data and (prev_year_tw_pma > 0 or prev_year_tw_pmdn > 0):
             if report.period_type == "Semester":
                 if report.period_name == "Semester I":
-                    yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN II {report.year - 1} & TRIWULAN II {report.year} (y-o-y)"
+                    yoy_title = f"Status PM: TW II {report.year - 1} vs TW II {report.year} (Y-o-Y)"
                     curr_label = f"TW II {report.year}"
                     prev_label = f"TW II {report.year - 1}"
                     yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
                 else:
-                    yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN IV {report.year - 1} & TRIWULAN IV {report.year} (y-o-y)"
+                    yoy_title = f"Status PM: TW IV {report.year - 1} vs TW IV {report.year} (Y-o-Y)"
                     curr_label = f"TW IV {report.year}"
                     prev_label = f"TW IV {report.year - 1}"
                     yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
             else:
-                yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {report.period_name} {report.year - 1} & {report.period_name} {report.year} (y-o-y)"
+                yoy_title = f"Status PM: {report.period_name} {report.year - 1} vs {report.year} (Y-o-Y)"
                 curr_label = f"{report.period_name} {report.year}"
                 prev_label = f"{report.period_name} {report.year - 1}"
                 yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
@@ -1533,22 +1533,22 @@ def render_report(report, stats: dict):
             )
             st.plotly_chart(fig_pm_yoy, use_container_width=True)
         else:
-            st.info("Upload file tahun sebelumnya untuk melihat perbandingan Y-o-Y per Status PM")
+            st.info("Upload file tahun sebelumnya untuk Y-o-Y")
     
     with col_pm_qoq:
         # Q-o-Q PM Comparison
         if tw1_pma > 0 or tw1_pmdn > 0 or tw2_pma > 0 or tw2_pmdn > 0:
             if report.period_type == "Semester":
                 if report.period_name == "Semester I":
-                    qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN I {report.year} & TRIWULAN II {report.year} (q-o-q)"
+                    qoq_title = f"Status PM: TW I vs TW II {report.year} (Q-o-Q)"
                     curr_label = f"TW II {report.year}"
                     prev_label = f"TW I {report.year}"
                 else:
-                    qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN III {report.year} & TRIWULAN IV {report.year} (q-o-q)"
+                    qoq_title = f"Status PM: TW III vs TW IV {report.year} (Q-o-Q)"
                     curr_label = f"TW IV {report.year}"
                     prev_label = f"TW III {report.year}"
             else:
-                qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
+                qoq_title = f"Status PM: {prev_q_label} vs {report.period_name} {report.year} (Q-o-Q)"
                 curr_label = f"{report.period_name} {report.year}"
                 prev_label = prev_q_label
             
