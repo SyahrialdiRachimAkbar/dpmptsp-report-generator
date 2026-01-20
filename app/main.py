@@ -2604,7 +2604,20 @@ def render_report(report, stats: dict):
                 chart_height = max(400, num_sectors * 30 + 100)
                 
                 fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
-                fig.update_layout(title='Perizinan per Sektor', template='plotly_dark', height=chart_height, yaxis={'categoryorder': 'total ascending'})
+                fig.update_layout(
+                    title='Perizinan per Sektor', 
+                    template='plotly_dark', 
+                    height=chart_height,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    yaxis={
+                        'categoryorder': 'total ascending',
+                        'automargin': True,
+                        'tickmode': 'linear'
+                    },
+                    xaxis={
+                        'automargin': True
+                    }
+                )
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Data sektor kementerian/lembaga tidak tersedia atau kosong.")
