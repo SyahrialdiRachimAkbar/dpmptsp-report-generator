@@ -729,6 +729,133 @@ class ChartGenerator:
         
         return fig
 
+    def create_grouped_comparison_two_categories(
+        self,
+        curr_val1: int,
+        curr_val2: int,
+        prev_val1: int,
+        prev_val2: int,
+        cat1_label: str,
+        cat2_label: str,
+        current_period_label: str,
+        prev_period_label: str,
+        title: str,
+        y_axis_title: str = "Jumlah"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart comparing two categories between two periods.
+        Generic version of create_pelaku_grouped_comparison.
+        
+        Args:
+            curr_val1: Value for Category 1 in Current Period
+            curr_val2: Value for Category 2 in Current Period
+            prev_val1: Value for Category 1 in Previous Period
+            prev_val2: Value for Category 2 in Previous Period
+            cat1_label: Name of Category 1 (e.g. "PMA")
+            cat2_label: Name of Category 2 (e.g. "PMDN")
+            current_period_label: Label for current period legend
+            prev_period_label: Label for previous period legend
+            title: Chart title
+            y_axis_title: Y-axis title
+        """
+        categories = [cat1_label, cat2_label]
+        prev_values = [prev_val1, prev_val2]
+        current_values = [curr_val1, curr_val2]
+        
+        # Calculate percentage changes
+        def calc_pct_change(curr, prev):
+            if prev == 0:
+                return 100.0 if curr > 0 else 0.0
+            return ((curr - prev) / prev) * 100
+        
+        pct1 = calc_pct_change(curr_val1, prev_val1)
+        pct2 = calc_pct_change(curr_val2, prev_val2)
+        pct_changes = [pct1, pct2]
+        
+        fig = go.Figure()
+        
+        # Previous period bars
+        fig.add_trace(go.Bar(
+            name=prev_period_label,
+            x=categories,
+            y=prev_values,
+            text=[f"{v:,.0f}".replace(",", ".") for v in prev_values],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)', # Orange
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Current period bars
+        fig.add_trace(go.Bar(
+            name=current_period_label,
+            x=categories,
+            y=current_values,
+            text=[f"{v:,.0f}".replace(",", ".") for v in current_values],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)', # Teal
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Add percentage stats
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#2ecc71' if pct >= 0 else '#e74c3c'
+            arrow = '↑' if pct >= 0 else '↓'
+            
+            # Use max height of the pair for annotation position
+            base_y = max(prev_values[i], current_values[i])
+            if base_y == 0: base_y = 1 # Avoid 0 height generic issue
+            
+            if prev_values[i] == 0 and current_values[i] == 0:
+                 text_an = "0%"
+            elif prev_values[i] == 0:
+                 text_an = f"{arrow}100%"
+            else:
+                 text_an = f"{arrow}{abs(pct):.2f}%"
+            
+            fig.add_annotation(
+                x=cat,
+                y=base_y * 1.15,
+                text=text_an,
+                showarrow=False,
+                font={'size': 12, 'color': color, 'weight': 'bold'}
+            )
+            
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': ''},
+            yaxis={'title': y_axis_title},
+            width=self.width,
+            height=400,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        return fig
+
+    def create_simple_bar_chart(
+        self,
+        labels: list,
+        values: list,
+        title: str,
+        color: str = '#3498db'
+    ) -> go.Figure:
+        """Create simple vertical bar chart."""
+        fig = go.Figure(data=[go.Bar(
+            x=labels,
+            y=values,
+            text=[f"{v:,.0f}".replace(",", ".") for v in values],
+            textposition='outside',
+            marker_color=color
+        )])
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            yaxis={'title': 'Jumlah'},
+            height=350,
+            **self.layout_defaults
+        )
+        return fig
+
     def create_pelaku_usaha_chart(
         self,
         umk_total: int,
