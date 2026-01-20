@@ -1036,11 +1036,31 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
                 st.session_state.investment_reports = investment_reports
                 
                 # Project projection (from TW summary)
-                # Create dummy summary for sections using it
-                summary_obj = TWSummary(triwulan=periode, year=tahun)
-                summary_obj.proyek = proyek_data.get_period_projects(months)
-                summary_obj.total_rp = current_inv_report.total_investasi
-                tw_summary[periode] = summary_obj
+                # Iterate through all quarters to populate available history
+                from app.config import TRIWULAN_KE_BULAN
+                
+                for period_name, period_months in TRIWULAN_KE_BULAN.items():
+                    # Calculate stats for this period
+                    period_proyek_count = proyek_data.get_period_projects(period_months)
+                    
+                    if period_proyek_count > 0:
+                        # Create summary if data exists
+                        sum_obj = TWSummary(triwulan=period_name, year=tahun)
+                        sum_obj.proyek = period_proyek_count
+                        
+                        # Populate investment values
+                        curr_pma_val = proyek_data.get_period_pma(period_months)
+                        curr_pmdn_val = proyek_data.get_period_pmdn(period_months)
+                        
+                        sum_obj.pma_rp = curr_pma_val
+                        sum_obj.pmdn_rp = curr_pmdn_val
+                        sum_obj.total_rp = curr_pma_val + curr_pmdn_val
+                        
+                        # Populate other fields if needed (Labor etc.)
+                        # sum_obj.tki = ... 
+                        
+                        tw_summary[period_name] = sum_obj
+                
                 st.session_state.tw_summary = tw_summary
                 
         except Exception as e:
