@@ -1251,30 +1251,47 @@ def render_report(report, stats: dict):
             pass
     
     elif report.period_type == "Semester":
-        # Semester I: Compare TW I vs TW II
-        # Semester II: Compare TW III vs TW IV
+        # For Semester periods:
+        # Y-o-Y: Compare last TW of semester (TW II or TW IV) with same TW previous year
+        # Q-o-Q: Compare first TW vs last TW within semester (TW I vs TW II, or TW III vs TW IV)
+        
         if report.period_name == "Semester I":
             tw1_months = TRIWULAN_KE_BULAN["TW I"]
             tw2_months = TRIWULAN_KE_BULAN["TW II"]
+            
+            # Q-o-Q: TW I vs TW II (same year)
             if current_full_data:
                 tw1_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw1_months)
                 tw2_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw2_months)
-                # Q-o-Q for Semester I: TW II vs TW I (latest vs earlier)
-                prev_q_total = tw1_total  # TW I is the "previous"
-                current_total = tw2_total  # TW II is "current" for Q-o-Q display
+                prev_q_total = tw1_total  # TW I is "previous quarter"
                 has_prev_q_data = True
                 prev_q_label = f"TW I {report.year}"
+                # Store current quarter total for Q-o-Q chart (TW II)
+                current_q_total = tw2_total
+            
+            # Y-o-Y: TW II this year vs TW II previous year
+            if prev_full_data:
+                prev_year_tw2 = sum(prev_full_data.monthly_totals.get(m, 0) for m in tw2_months)
+                prev_year_total = prev_year_tw2
+                
         elif report.period_name == "Semester II":
             tw3_months = TRIWULAN_KE_BULAN["TW III"]
             tw4_months = TRIWULAN_KE_BULAN["TW IV"]
+            
+            # Q-o-Q: TW III vs TW IV (same year)
             if current_full_data:
                 tw3_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw3_months)
                 tw4_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw4_months)
-                # Q-o-Q for Semester II: TW IV vs TW III (latest vs earlier)
-                prev_q_total = tw3_total  # TW III is the "previous"
-                current_total = tw4_total  # TW IV is "current" for Q-o-Q display
+                prev_q_total = tw3_total  # TW III is "previous quarter"
                 has_prev_q_data = True
                 prev_q_label = f"TW III {report.year}"
+                # Store current quarter total for Q-o-Q chart (TW IV)
+                current_q_total = tw4_total
+            
+            # Y-o-Y: TW IV this year vs TW IV previous year
+            if prev_full_data:
+                prev_year_tw4 = sum(prev_full_data.monthly_totals.get(m, 0) for m in tw4_months)
+                prev_year_total = prev_year_tw4
     
     # === Top Row: Monthly Chart + Narrative ===
     col_top_left, col_top_right = st.columns([1, 1])
@@ -1285,7 +1302,7 @@ def render_report(report, stats: dict):
         if monthly_data:
             fig_monthly = chart_gen.create_monthly_bar_with_trendline(
                 monthly_data,
-                f"JUMLAH NIB PER-BULAN TAHUN {report.year}\nDI PROVINSI JAWA BARAT" # Label from image
+                f"JUMLAH NIB PER-BULAN TAHUN {report.year}\nDI PROVINSI LAMPUNG"
             )
             st.plotly_chart(fig_monthly, use_container_width=True)
             
@@ -1296,15 +1313,46 @@ def render_report(report, stats: dict):
     # === Bottom Row: Y-o-Y + Q-o-Q ===
     col_btm_left, col_btm_right = st.columns(2)
     
+    # Determine labels based on period type
+    if report.period_type == "Semester":
+        if report.period_name == "Semester I":
+            yoy_current_label = f"TW II {report.year}"
+            yoy_prev_label = f"TW II {report.year - 1}"
+            qoq_current_label = f"TW II {report.year}"
+            qoq_prev_label = f"TW I {report.year}"
+            yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN II {report.year - 1} & TRIWULAN II {report.year} (y-o-y)"
+            qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN I {report.year} & TRIWULAN II {report.year} (q-o-q)"
+            # Use TW II totals for Y-o-Y and Q-o-Q
+            current_yoy_value = current_q_total if 'current_q_total' in dir() else current_total
+            current_qoq_value = current_q_total if 'current_q_total' in dir() else current_total
+        else:  # Semester II
+            yoy_current_label = f"TW IV {report.year}"
+            yoy_prev_label = f"TW IV {report.year - 1}"
+            qoq_current_label = f"TW IV {report.year}"
+            qoq_prev_label = f"TW III {report.year}"
+            yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN IV {report.year - 1} & TRIWULAN IV {report.year} (y-o-y)"
+            qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN III {report.year} & TRIWULAN IV {report.year} (q-o-q)"
+            current_yoy_value = current_q_total if 'current_q_total' in dir() else current_total
+            current_qoq_value = current_q_total if 'current_q_total' in dir() else current_total
+    else:
+        yoy_current_label = f"{report.period_name} {report.year}"
+        yoy_prev_label = f"{report.period_name} {report.year - 1}"
+        qoq_current_label = f"{report.period_name} {report.year}"
+        qoq_prev_label = prev_q_label
+        yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {report.period_name} {report.year-1} & {report.period_name} {report.year} (y-o-y)"
+        qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
+        current_yoy_value = current_total
+        current_qoq_value = current_total
+    
     with col_btm_left:
         # Y-o-Y Chart
         if prev_full_data:
              fig_yoy = chart_gen.create_qoq_comparison_bar(
-                current_data={f"{report.period_name} {report.year}": current_total},
-                previous_data={f"{report.period_name} {report.year-1}": prev_year_total},
-                current_label=f"{report.period_name} {report.year}",
-                previous_label=f"{report.period_name} {report.year-1}",
-                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {report.period_name} {report.year-1} & {report.period_name} {report.year} (y-o-y)"
+                current_data={yoy_current_label: current_yoy_value},
+                previous_data={yoy_prev_label: prev_year_total},
+                current_label=yoy_current_label,
+                previous_label=yoy_prev_label,
+                title=yoy_title
              )
              st.plotly_chart(fig_yoy, use_container_width=True)
         else:
@@ -1314,11 +1362,11 @@ def render_report(report, stats: dict):
         # Q-o-Q Chart
         if has_prev_q_data:
              fig_qoq = chart_gen.create_qoq_comparison_bar(
-                current_data={f"{report.period_name} {report.year}": current_total},
-                previous_data={prev_q_label: prev_q_total},
-                current_label=f"{report.period_name} {report.year}",
-                previous_label=prev_q_label,
-                title=f"JUMLAH NIB DI PROVINSI JAWA BARAT\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
+                current_data={qoq_current_label: current_qoq_value},
+                previous_data={qoq_prev_label: prev_q_total},
+                current_label=qoq_current_label,
+                previous_label=qoq_prev_label,
+                title=qoq_title
              )
              st.plotly_chart(fig_qoq, use_container_width=True)
         else:
