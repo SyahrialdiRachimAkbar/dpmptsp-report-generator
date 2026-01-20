@@ -573,24 +573,83 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
         
         return f"Berdasarkan proporsi, {dominant} mendominasi dengan {dominant_pct:.1f}% dari total investasi. {insight}"
     
-    def generate_labor_narrative(self, tki: int, tka: int) -> str:
-        """Generate narrative for labor absorption chart."""
-        total = tki + tka
-        if total <= 0:
-            return ""
+    def generate_labor_narrative(self, tki_total: int, tka_total: int) -> str:
+        """Generate narrative for labor absorption."""
+        total = tki_total + tka_total
         
-        tki_pct = (tki / total * 100)
-        tka_pct = (tka / total * 100)
+        if total == 0:
+            return "Belum ada data penyerapan tenaga kerja yang tercatat pada periode ini."
+            
+        tki_pct = (tki_total / total) * 100
+        tka_pct = (tka_total / total) * 100
         
-        tki_formatted = f"{tki:,}".replace(",", ".")
-        tka_formatted = f"{tka:,}".replace(",", ".")
+        text = f"""
+        Total penyerapan tenaga kerja pada periode ini mencapai {total:,} orang.
+        Dari jumlah tersebut, sebanyak {tki_total:,} orang ({tki_pct:.1f}%) merupakan Tenaga Kerja Indonesia (TKI),
+        sedangkan {tka_total:,} orang ({tka_pct:.1f}%) merupakan Tenaga Kerja Asing (TKA).
+        """.replace(",", ".")
         
-        text = f"Penyerapan tenaga kerja mencapai {tki_formatted} TKI ({tki_pct:.1f}%) dan {tka_formatted} TKA ({tka_pct:.1f}%)."
+        return text
+
+    def generate_skala_usaha_comparison_narrative(
+        self,
+        current_data: Dict[str, int],
+        prev_year_data: Dict[str, int],
+        prev_q_data: Dict[str, int],
+        period_name: str,
+        year: int
+    ) -> str:
+        """
+        Generate narrative for Skala Usaha distribution and comparison.
+        Matches the style in the reference image.
+        """
+        total_proyek = sum(current_data.values())
         
-        if tki > tka * 10:
-            text += " Dominasi TKI menunjukkan investasi berhasil membuka lapangan kerja bagi tenaga lokal."
-        elif tka > tki:
-            text += " Tingginya proporsi TKA mengindikasikan kebutuhan tenaga ahli dari luar negeri."
+        text = f"Rekapitulasi jumlah proyek di provinsi lampung periode {period_name} tahun {year} berdasarkan skala usaha berjumlah <b>{total_proyek:,.0f}</b>.".replace(",", ".")
+        
+        # Detail breakdown
+        details = []
+        # Standardize keys
+        std_keys = ['MIKRO', 'KECIL', 'MENENGAH', 'BESAR']
+        
+        # Helper to find key
+        def find_val(data, key_part):
+            for k, v in data.items():
+                if key_part in str(k).upper():
+                    return v
+            return 0
+            
+        for key in std_keys:
+            count = find_val(current_data, key)
+            if count > 0:
+                details.append(f"yang berstatus tingkat risiko <b>USAHA {key}</b> berjumlah <b>{count:,.0f}</b> proyek".replace(",", "."))
+        
+        if details:
+            text += ", " + ", ".join(details) + "."
+            
+        # Comparison Y-o-Y
+        text += f" Jika dibandingkan dengan tahun sebelumnya ({period_name} tahun {year-1}), "
+        yoy_details = []
+        for key in std_keys:
+            curr = find_val(current_data, key)
+            prev = find_val(prev_year_data, key)
+            
+            if curr > 0 or prev > 0:
+                if prev == 0:
+                    growth = 100.0 if curr > 0 else 0
+                    trend = "peningkatan"
+                else:
+                    growth = ((curr - prev) / prev) * 100
+                    trend = "peningkatan" if growth >= 0 else "penurunan"
+                
+                yoy_details.append(f"yang berstatus tingkat risiko <b>USAHA {key}</b> mengalami {trend} sebesar <b>{abs(growth):.2f}%</b>")
+        
+        if yoy_details:
+             text += ", ".join(yoy_details) + "."
+             
+        # Comparison Q-o-Q
+        # (Optional to add logic for prev quarter name, simpler to just list stats)
+        # For brevity matching the image style which just flows.
         
         return text
     

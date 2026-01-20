@@ -1286,16 +1286,34 @@ class ChartGenerator:
             gridcolor='rgba(150,150,150,0.3)',
             title_font={'color': '#e8eaed'},
             tickfont={'color': '#e8eaed'}
+                 text_an = f"{arrow}{abs(pct):.1f}%"
+            
+            fig.add_annotation(
+                x=cat,
+                y=base_y * 1.15,
+                text=text_an,
+                showarrow=False,
+                font={'size': 11, 'color': color, 'weight': 'bold'}
+            )
+            
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': ''},
+            yaxis={'title': y_axis_title},
+            width=self.width,
+            height=400,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
         )
-        fig.update_yaxes(tickfont={'color': '#e8eaed'})
-        
         return fig
-    
+
     def create_pma_pmdn_comparison_chart(
         self,
-        pma_total: float,
-        pmdn_total: float,
-        title: str = "Perbandingan Investasi PMA vs PMDN"
+        pma_val: int,
+        pmdn_val: int,
+        title: str = "PMA vs PMDN"
     ) -> go.Figure:
         """
         Create a grouped bar or pie chart comparing PMA and PMDN investments.
