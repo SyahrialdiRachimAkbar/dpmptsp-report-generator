@@ -2159,70 +2159,14 @@ def render_report(report, stats: dict):
             current_tki = current_investment.total_tki
             current_tka = current_investment.total_tka
             
-            # Y-o-Y Stats
-            prev_year_tki = 0
-            prev_year_tka = 0
-            if 'prev_proyek_data' in locals() and prev_proyek_data:
-                 prev_year_tki = prev_proyek_data.get_period_tki(target_months)
-                 prev_year_tka = prev_proyek_data.get_period_tka(target_months)
-            
-            # Q-o-Q Stats
-            prev_q_tki = 0
-            prev_q_tka = 0
-            if 'prev_q_source_data' in locals() and prev_q_source_data and 'prev_q_name' in locals():
-                 prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
-                 prev_q_tki = prev_q_source_data.get_period_tki(prev_q_months)
-                 prev_q_tka = prev_q_source_data.get_period_tka(prev_q_months)
-
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Current Status Bar Chart (Replaces old labor chart)
-                fig_labor = chart_gen.create_simple_bar_chart(
-                    labels=['TKI', 'TKA'],
-                    values=[current_tki, current_tka],
-                    title=f"Tenaga Kerja {report.period_name} {report.year}",
-                    color='#e67e22' # Orange
-                )
-                st.plotly_chart(fig_labor, use_container_width=True)
-            
-            with col2:
-                # Y-o-Y Comparison
-                if 'prev_proyek_data' in locals() and prev_proyek_data:
-                     fig_yoy_labor = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=current_tki,
-                         curr_val2=current_tka,
-                         prev_val1=prev_year_tki,
-                         prev_val2=prev_year_tka,
-                         cat1_label="TKI",
-                         cat2_label="TKA",
-                         current_period_label=f"{report.period_name} {report.year}",
-                         prev_period_label=f"{report.period_name} {report.year - 1}",
-                         title="Tenaga Kerja (y-o-y)",
-                         y_axis_title="Jumlah Orang"
-                     )
-                     st.plotly_chart(fig_yoy_labor, use_container_width=True)
-                else:
-                     st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
-
-            with col3:
-                # Q-o-Q Comparison
-                if (prev_q_tki > 0 or current_tki > 0) and has_prev_q_data:
-                     fig_qoq_labor = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=current_tki,
-                         curr_val2=current_tka,
-                         prev_val1=prev_q_tki,
-                         prev_val2=prev_q_tka,
-                         cat1_label="TKI",
-                         cat2_label="TKA",
-                         current_period_label=f"{report.period_name} {report.year}",
-                         prev_period_label=prev_q_label_text,
-                         title="Tenaga Kerja (q-o-q)",
-                         y_axis_title="Jumlah Orang"
-                     )
-                     st.plotly_chart(fig_qoq_labor, use_container_width=True)
-                else:
-                     st.info(f"Data {prev_q_label_text} tidak tersedia untuk Q-o-Q")
+            # Create Main Labor Chart
+            fig_labor = chart_gen.create_simple_bar_chart(
+                labels=['TKI', 'TKA'],
+                values=[current_tki, current_tka],
+                title=f"Tenaga Kerja {report.period_name} {report.year}",
+                color='#e67e22' # Orange
+            )
+            st.plotly_chart(fig_labor, use_container_width=True)
             
             # Narrative for 2.3
             labor_narr = narrative_gen.generate_labor_narrative(
