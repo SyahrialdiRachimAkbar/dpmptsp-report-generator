@@ -1250,6 +1250,32 @@ def render_report(report, stats: dict):
         except ValueError:
             pass
     
+    elif report.period_type == "Semester":
+        # Semester I: Compare TW I vs TW II
+        # Semester II: Compare TW III vs TW IV
+        if report.period_name == "Semester I":
+            tw1_months = TRIWULAN_KE_BULAN["TW I"]
+            tw2_months = TRIWULAN_KE_BULAN["TW II"]
+            if current_full_data:
+                tw1_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw1_months)
+                tw2_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw2_months)
+                # Q-o-Q for Semester I: TW II vs TW I (latest vs earlier)
+                prev_q_total = tw1_total  # TW I is the "previous"
+                current_total = tw2_total  # TW II is "current" for Q-o-Q display
+                has_prev_q_data = True
+                prev_q_label = f"TW I {report.year}"
+        elif report.period_name == "Semester II":
+            tw3_months = TRIWULAN_KE_BULAN["TW III"]
+            tw4_months = TRIWULAN_KE_BULAN["TW IV"]
+            if current_full_data:
+                tw3_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw3_months)
+                tw4_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw4_months)
+                # Q-o-Q for Semester II: TW IV vs TW III (latest vs earlier)
+                prev_q_total = tw3_total  # TW III is the "previous"
+                current_total = tw4_total  # TW IV is "current" for Q-o-Q display
+                has_prev_q_data = True
+                prev_q_label = f"TW III {report.year}"
+    
     # === Top Row: Monthly Chart + Narrative ===
     col_top_left, col_top_right = st.columns([1, 1])
     
