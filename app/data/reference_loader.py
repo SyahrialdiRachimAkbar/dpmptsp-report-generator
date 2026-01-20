@@ -751,6 +751,9 @@ class ReferenceDataLoader:
             if kewenangan_col:
                 df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
             
+            # Try to find a Project ID column for deduplication (to fix inflated labor counts)
+            id_col = self._find_column(df, ['id_proyek', 'id proyek', 'nomor_proyek', 'kode_proyek', 'nib'])
+
             # Process per month (sum all, no dedup)
             for month in NAMA_BULAN:
                 month_df = df[df['_month'] == month]
@@ -774,7 +777,9 @@ class ReferenceDataLoader:
                         wilayah_sums = month_df.groupby(wilayah_col)[investment_col].sum()
                         result.monthly_by_wilayah[month] = dict(wilayah_sums)
                 
-                # Labor counts
+                # Labor counts (Total)
+                # Note: We might need dedup here too if global stats are also inflated, 
+                # but user specifically mentioned "per district/city" in Section 2.5
                 if tki_col:
                     result.monthly_tki[month] = int(month_df[tki_col].sum())
                 if tka_col:
@@ -796,12 +801,21 @@ class ReferenceDataLoader:
                     result.monthly_by_skala_usaha[month] = dict(skala_counts)
                 
                 # Labor by Wilayah (TKI+TKA combined per wilayah)
+                # FIX: Deduplicate by Project ID to prevent double counting
                 if wilayah_col and (tki_col or tka_col):
                     labor_by_wil = {}
                     for wil in month_df[wilayah_col].dropna().unique():
                         wil_df = month_df[month_df[wilayah_col] == wil]
-                        tki_sum = int(wil_df[tki_col].sum()) if tki_col else 0
-                        tka_sum = int(wil_df[tka_col].fillna(0).sum()) if tka_col else 0
+                        
+                        # Dedup if ID column exists
+                        if id_col:
+                            # Keep first occurrence of each project in this district
+                            calc_df = wil_df.drop_duplicates(subset=[id_col])
+                        else:
+                            calc_df = wil_df
+                            
+                        tki_sum = int(calc_df[tki_col].sum()) if tki_col else 0
+                        tka_sum = int(calc_df[tka_col].fillna(0).sum()) if tka_col else 0
                         labor_by_wil[wil] = tki_sum + tka_sum
                     result.monthly_labor_by_wilayah[month] = labor_by_wil
                 
