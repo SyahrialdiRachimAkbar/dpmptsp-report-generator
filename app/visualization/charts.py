@@ -1286,27 +1286,9 @@ class ChartGenerator:
             gridcolor='rgba(150,150,150,0.3)',
             title_font={'color': '#e8eaed'},
             tickfont={'color': '#e8eaed'}
-                 text_an = f"{arrow}{abs(pct):.1f}%"
-            
-            fig.add_annotation(
-                x=cat,
-                y=base_y * 1.15,
-                text=text_an,
-                showarrow=False,
-                font={'size': 11, 'color': color, 'weight': 'bold'}
-            )
-            
-        fig.update_layout(
-            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
-            barmode='group',
-            xaxis={'title': ''},
-            yaxis={'title': y_axis_title},
-            width=self.width,
-            height=400,
-            showlegend=True,
-            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
-            **self.layout_defaults
         )
+        fig.update_yaxes(tickfont={'color': '#e8eaed'})
+        
         return fig
 
     def create_pma_pmdn_comparison_chart(
@@ -1319,22 +1301,22 @@ class ChartGenerator:
         Create a grouped bar or pie chart comparing PMA and PMDN investments.
         
         Args:
-            pma_total: Total PMA investment in Rupiah
-            pmdn_total: Total PMDN investment in Rupiah
+            pma_val: Total PMA investment in Rupiah
+            pmdn_val: Total PMDN investment in Rupiah
             title: Chart title
             
         Returns:
             Plotly Figure object
         """
-        total = pma_total + pmdn_total
-        pma_pct = (pma_total / total * 100) if total > 0 else 0
-        pmdn_pct = (pmdn_total / total * 100) if total > 0 else 0
+        total = pma_val + pmdn_val
+        pma_pct = (pma_val / total * 100) if total > 0 else 0
+        pmdn_pct = (pmdn_val / total * 100) if total > 0 else 0
         
         fig = go.Figure()
         
         fig.add_trace(go.Pie(
             labels=['PMA', 'PMDN'],
-            values=[pma_total, pmdn_total],
+            values=[pma_val, pmdn_val],
             hole=0.6,
             marker_colors=[self.COLORS['pma'], self.COLORS['pmdn']],
             textinfo='label+percent',
