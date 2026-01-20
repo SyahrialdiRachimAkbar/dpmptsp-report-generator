@@ -1551,8 +1551,8 @@ def render_report(report, stats: dict):
     col_pm1, col_pm2 = st.columns([1, 1.5])
     
     with col_pm1:
-        # Bar chart for current period PM distribution
-        fig_pm_bar = chart_gen.create_pm_comparison_chart(
+        # Horizontal bar chart for current period PM distribution
+        fig_pm_bar = chart_gen.create_pm_horizontal_bar(
             pma_total=current_pma,
             pmdn_total=current_pmdn,
             title=f"Status PM - {report.period_name} {report.year}"

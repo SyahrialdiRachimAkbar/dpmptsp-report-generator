@@ -390,6 +390,70 @@ class ChartGenerator:
         
         return fig
     
+    def create_pm_horizontal_bar(
+        self,
+        pma_total: int,
+        pmdn_total: int,
+        title: str = "Status Penanaman Modal"
+    ) -> go.Figure:
+        """
+        Create horizontal bar chart for PMA vs PMDN distribution.
+        
+        Args:
+            pma_total: Total PMA count
+            pmdn_total: Total PMDN count
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object with horizontal bars
+        """
+        categories = ['PMDN', 'PMA']  # PMDN on top, PMA on bottom
+        values = [pmdn_total, pma_total]
+        total = sum(values)
+        
+        # Calculate percentages
+        pma_pct = (pma_total / total * 100) if total > 0 else 0
+        pmdn_pct = (pmdn_total / total * 100) if total > 0 else 0
+        
+        fig = go.Figure()
+        
+        # PMDN bar (blue/teal)
+        fig.add_trace(go.Bar(
+            name='PMDN',
+            y=['PMDN'],
+            x=[pmdn_total],
+            orientation='h',
+            text=[f"{pmdn_total:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)',
+            textfont={'size': 14, 'color': self.COLORS['text']}
+        ))
+        
+        # PMA bar (orange)
+        fig.add_trace(go.Bar(
+            name='PMA',
+            y=['PMA'],
+            x=[pma_total],
+            orientation='h',
+            text=[f"{pma_total:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)',
+            textfont={'size': 14, 'color': self.COLORS['text']}
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            xaxis={'title': 'Jumlah NIB'},
+            yaxis={'title': ''},
+            width=self.width,
+            height=300,  # Shorter height for horizontal bars
+            showlegend=False,
+            barmode='group',
+            **self.layout_defaults
+        )
+        
+        return fig
+    
     def create_pm_grouped_comparison(
         self,
         current_pma: int,
