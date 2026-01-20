@@ -2151,30 +2151,7 @@ def render_report(report, stats: dict):
                 st.markdown(f'<div class="narrative-box">{pma_pmdn_narr}</div>', unsafe_allow_html=True)
 
 
-            # --- SECTION 2.3 TENAGA KERJA ---
-            st.markdown('<div class="section-title">2.3 Penyerapan Tenaga Kerja</div>', 
-                        unsafe_allow_html=True)
-            
-            # --- CALCULATE LABOR STATS ---
-            current_tki = current_investment.total_tki
-            current_tka = current_investment.total_tka
-            
-            # Create Main Labor Chart
-            fig_labor = chart_gen.create_simple_bar_chart(
-                labels=['TKI', 'TKA'],
-                values=[current_tki, current_tka],
-                title=f"Tenaga Kerja {report.period_name} {report.year}",
-                color='#e67e22' # Orange
-            )
-            st.plotly_chart(fig_labor, use_container_width=True)
-            
-            # Narrative for 2.3
-            labor_narr = narrative_gen.generate_labor_narrative(
-                current_investment.total_tki,
-                current_investment.total_tka
-            )
-            if labor_narr:
-                st.markdown(f'<div class="narrative-box">{labor_narr}</div>', unsafe_allow_html=True)
+
 
             
             # TW Comparison chart (if multiple TW data available)
