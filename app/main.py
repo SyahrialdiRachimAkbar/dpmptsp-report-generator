@@ -2143,7 +2143,7 @@ def render_report(report, stats: dict):
                      st.info(f"Data {prev_q_label_text} tidak tersedia untuk Q-o-Q")
 
             # Narrative for 2.2
-            pma_pmdn_narr = narrative_gen.generate_pma_pmdn_comparison_narrative(
+            pma_pmdn_narr = narrative_gen.generate_status_pm_narrative(
                 current_pma,
                 current_pmdn,
                 unit_type="proyek"

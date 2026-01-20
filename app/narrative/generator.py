@@ -551,7 +551,7 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
         
         return text
     
-    def generate_pma_pmdn_comparison_narrative(self, pma_total: float, pmdn_total: float, unit_type: str = "investasi") -> str:
+    def generate_status_pm_narrative(self, pma_total: float, pmdn_total: float, unit_type: str = "investasi") -> str:
         """
         Generate narrative for PMA vs PMDN comparison chart.
         
