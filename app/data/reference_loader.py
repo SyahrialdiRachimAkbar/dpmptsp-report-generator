@@ -143,6 +143,14 @@ class PBOSSReferenceData:
         """Get total permits for specified months."""
         return sum(self.monthly_permits.get(m, 0) for m in months)
 
+    def get_period_permits_by_month(self, months: List[str]) -> Dict[str, int]:
+        """Get permit counts by month for specified months."""
+        result = {}
+        for month in months:
+            if month in self.monthly_permits:
+                result[month] = self.monthly_permits[month]
+        return result
+
 
 @dataclass
 class ProyekReferenceData:
