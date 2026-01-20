@@ -1699,11 +1699,19 @@ def render_report(report, stats: dict):
         if current_full_data:
             tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, target_months)
         
-        if has_prev_q_data and current_full_data:
-            if prev_q_label.startswith("TW"):
-                tw_name = " ".join(prev_q_label.split()[:2])
-                if tw_name in TRIWULAN_KE_BULAN:
-                    tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, TRIWULAN_KE_BULAN[tw_name])
+        # Q-o-Q Logic: Handle cross-year (TW I) vs same-year (TW II-IV)
+        if has_prev_q_data:
+             # prev_q_label is like "TW IV 2024" or "TW I 2025"
+             parts = prev_q_label.split()
+             if len(parts) >= 3:
+                 prev_q_name = f"{parts[0]} {parts[1]}" # "TW IV"
+                 prev_q_year_str = parts[2]
+                 
+                 # Decide source: current year file or prev year file?
+                 source_data = current_full_data if str(report.year) == prev_q_year_str else prev_full_data
+                 
+                 if source_data and prev_q_name in TRIWULAN_KE_BULAN:
+                     tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(source_data, TRIWULAN_KE_BULAN[prev_q_name])
         
         if prev_full_data:
             prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, target_months)
