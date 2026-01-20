@@ -368,11 +368,18 @@ class ReferenceDataLoader:
             xl = pd.ExcelFile(file_bytes)
             
             # Find Sheet 1 or similar raw data sheet
+            # Priority: 'Sheet 1' (with space) > 'sheet1' (no space) > last sheet
             raw_sheet = None
             for sheet in xl.sheet_names:
-                if 'sheet 1' in sheet.lower() or sheet.lower() == 'sheet1':
+                if sheet.lower() == 'sheet 1':  # Exact match with space first
                     raw_sheet = sheet
                     break
+            
+            if not raw_sheet:
+                for sheet in xl.sheet_names:
+                    if 'sheet 1' in sheet.lower() or sheet.lower() == 'sheet1':
+                        raw_sheet = sheet
+                        break
             
             if not raw_sheet:
                 raw_sheet = xl.sheet_names[-1]  # Fallback to last sheet

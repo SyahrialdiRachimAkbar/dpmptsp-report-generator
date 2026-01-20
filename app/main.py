@@ -277,77 +277,7 @@ st.markdown("""
         background: var(--card-bg);
         backdrop-filter: blur(10px);
         border-radius: var(--border-radius);
-        padding: 1.5rem;
-        box-shadow: var(--shadow-soft);
-        border: 1px solid var(--card-border);
-        transition: var(--transition);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .metric-card:hover {
-        transform: translateY(-5px);
-        box-shadow: var(--shadow-hover);
-    }
-    
-    .metric-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: var(--gradient-primary);
-    }
-    
-    .metric-card.accent::before {
-        background: var(--gradient-accent);
-    }
-    
-    /* ===== CUSTOM METRIC DISPLAY ===== */
-    .custom-metric {
-        background: var(--card-bg);
-        backdrop-filter: blur(10px);
-        border-radius: var(--border-radius);
-        padding: 1.5rem;
-        box-shadow: var(--shadow-soft);
-        border: 1px solid var(--card-border);
-        text-align: center;
-        transition: var(--transition);
-        height: 100%;
-    }
-    
-    .custom-metric:hover {
-        transform: translateY(-3px);
-        box-shadow: var(--shadow-hover);
-    }
-    
-    .metric-icon {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--primary-color);
-        margin-bottom: 0.25rem;
-    }
-    
-    .metric-label {
-        font-size: 0.9rem;
-        color: var(--text-secondary);
-        font-weight: 500;
-    }
-    
-    .metric-delta {
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin-top: 0.5rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-    }
-    
+
     .metric-delta.positive {
         background: rgba(92, 184, 92, 0.15);
         color: var(--accent-color);
