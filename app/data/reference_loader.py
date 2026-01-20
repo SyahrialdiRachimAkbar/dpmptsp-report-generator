@@ -353,6 +353,57 @@ class ReferenceDataLoader:
         except Exception:
             return None
 
+    def _parse_date_obj(self, date_val) -> Optional[datetime]:
+        """Parse a date value to datetime object."""
+        if pd.isna(date_val):
+            return None
+        
+        try:
+            # If standard datetime object
+            if isinstance(date_val, datetime):
+                return date_val
+            
+            # If string
+            if isinstance(date_val, str):
+                date_str = date_val.strip()
+                
+                # Check for "Day Month Year" format (e.g., "18 November 2025")
+                try:
+                    # Try English parsing first
+                    return datetime.strptime(date_str, '%d %B %Y')
+                except ValueError:
+                    pass
+                
+                # Check for Indonesian month names manually
+                indo_months = {
+                    'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4,
+                    'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8,
+                    'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
+                }
+                
+                # Check if string contains any Indo month
+                for indo, idx in indo_months.items():
+                    if indo.lower() in date_str.lower():
+                        # Try to replace indo month with english or parse manually
+                        # Simple regex to extract Day and Year if format is "DD Month YYYY"
+                        import re
+                        match = re.search(r'(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})', date_str)
+                        if match:
+                            d, m, y = match.groups()
+                            if m.lower() == indo.lower():
+                                return datetime(int(y), idx, int(d))
+                
+                # Try standard numeric formats
+                for fmt in ['%m/%d/%Y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                    try:
+                        return datetime.strptime(date_str, fmt)
+                    except ValueError:
+                        continue
+                        
+            return None
+        except Exception:
+            return None
+
     def load_nib(self, file_bytes: BytesIO, filename: str, year: Optional[int] = None) -> Optional[NIBReferenceData]:
         """
         Load NIB reference file.
@@ -671,8 +722,17 @@ class ReferenceDataLoader:
                 year = self.extract_year_from_filename(filename) or datetime.now().year
             
             # Parse dates
+            # Parse dates and Filter by Year
             if date_col:
-                df['_month'] = df[date_col].apply(self._parse_date_to_month)
+                # First convert to datetime objects
+                df['_date_obj'] = df[date_col].apply(self._parse_date_obj)
+                
+                # Filter by year if specified
+                if year:
+                    df = df[df['_date_obj'].apply(lambda x: x.year == year if x else False)]
+                
+                # Then extract month names from the filtered data
+                df['_month'] = df['_date_obj'].apply(lambda x: self.MONTH_MAP.get(x.month) if x else None)
             else:
                 df['_month'] = 'Januari'
             
