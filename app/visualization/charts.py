@@ -640,7 +640,95 @@ class ChartGenerator:
         )
         
         return fig
-    
+
+    def create_comparison_bar_chart(
+        self,
+        current_val: int,
+        prev_val: int,
+        current_label: str,
+        prev_label: str,
+        title: str = "Perbandingan"
+    ) -> go.Figure:
+        """
+        Create a simple side-by-side comparison bar chart for two single values.
+        Useful for Y-o-Y or Q-o-Q comparisons of a single metric (e.g. Total Proyek).
+        
+        Args:
+            current_val: Current period value
+            prev_val: Previous period value
+            current_label: Label for current period bar
+            prev_label: Label for previous period bar
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        categories = [''] # Single category, empty label to avoid clutter
+        prev_values = [prev_val]
+        current_values = [current_val]
+        
+        # Calculate percentage change
+        if prev_val == 0:
+            pct_change = 100.0 if current_val > 0 else 0.0
+        else:
+            pct_change = ((current_val - prev_val) / prev_val) * 100
+            
+        fig = go.Figure()
+        
+        # Previous period bar (orange/secondary)
+        fig.add_trace(go.Bar(
+            name=prev_label,
+            x=categories,
+            y=prev_values,
+            text=[f"{prev_val:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='rgba(149, 165, 166, 0.7)', # Grey/Muted for previous
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Current period bar (green/primary)
+        fig.add_trace(go.Bar(
+            name=current_label,
+            x=categories,
+            y=current_values,
+            text=[f"{current_val:,}".replace(",", ".")],
+            textposition='outside',
+            marker_color='rgba(46, 204, 113, 0.8)', # Green
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Add percentage change annotation
+        color = '#2ecc71' if pct_change >= 0 else '#e74c3c'
+        arrow = '↑' if pct_change >= 0 else '↓'
+        if prev_val == 0 and current_val == 0:
+            annot_text = "0%"
+        elif prev_val == 0:
+             annot_text = f"{arrow}100%"
+        else:
+             annot_text = f"{arrow}{abs(pct_change):.2f}%"
+            
+        fig.add_annotation(
+            x=categories[0],
+            y=max(prev_val, current_val) * 1.15,
+            text=annot_text,
+            showarrow=False,
+            font={'size': 14, 'color': color, 'weight': 'bold'}
+        )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': '', 'showticklabels': False}, # Hide x-axis labels as legend explains
+            yaxis={'title': 'Jumlah Proyek'},
+            width=self.width,
+            height=300, # Compact height
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        
+        return fig
+
     def create_pelaku_usaha_chart(
         self,
         umk_total: int,

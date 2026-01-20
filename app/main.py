@@ -1902,64 +1902,160 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota</div>', 
                         unsafe_allow_html=True)
             
-            # Monthly project chart and Kab/Kota side by side
+            # Load Previous Year Project File if available
             proyek_file = st.session_state.get('proyek_ref_file')
-            col1, col2 = st.columns(2)
+            proyek_prev_file = st.session_state.get('proyek_prev_ref_file')
             
             if proyek_file:
                 from app.data.reference_loader import ReferenceDataLoader
                 loader = ReferenceDataLoader()
-                months = loader.get_months_for_period(report.period_type, report.period_name)
-                proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
                 
-                if proyek_data:
-                    with col1:
-                        # Monthly project chart
+                # Load Current Data
+                current_proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
+                
+                # Load Previous Data (if available)
+                prev_proyek_data = None
+                if proyek_prev_file:
+                    prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, report.year - 1)
+                
+                # Calculate Stats
+                target_months = loader.get_months_for_period(report.period_type, report.period_name)
+                
+                def get_proyek_total(data_obj, months):
+                   if not data_obj: return 0
+                   return sum(data_obj.monthly_projects.get(m, 0) for m in months)
+
+                # Current Period Total
+                curr_total_proyek = get_proyek_total(current_proyek_data, target_months)
+                
+                # Y-o-Y Stats
+                prev_year_total_proyek = get_proyek_total(prev_proyek_data, target_months)
+                
+                # Q-o-Q Stats
+                prev_q_total_proyek = 0
+                prev_q_source_data = None
+                prev_q_label_text = prev_q_label # e.g. "TW IV 2024" or "TW I 2025" from earlier global var
+                
+                if has_prev_q_data: # Use global flag as hint that we should look for Q-o-Q
+                     # Determine source for Prev Q (Same Year or Prev Year)
+                     parts = prev_q_label.split()
+                     if len(parts) >= 3:
+                         prev_q_name = f"{parts[0]} {parts[1]}"
+                         prev_q_year_str = parts[2]
+                         prev_q_source_data = current_proyek_data if str(report.year) == prev_q_year_str else prev_proyek_data
+                         
+                         if prev_q_source_data and prev_q_name in TRIWULAN_KE_BULAN:
+                             prev_q_total_proyek = get_proyek_total(prev_q_source_data, TRIWULAN_KE_BULAN[prev_q_name])
+                
+                if current_proyek_data:
+                    # Layout: Left Col (3 Charts), Right Col (1 Chart)
+                    col_left, col_right = st.columns([1, 1.2]) # Right column slightly wider for long names
+                    
+                    with col_left:
+                        # 1. Monthly Chart
                         monthly_project_data = {}
-                        for month in months:
-                            if month in proyek_data.monthly_projects:
-                                monthly_project_data[month] = proyek_data.monthly_projects[month]
+                        for month in target_months:
+                            if month in current_proyek_data.monthly_projects:
+                                monthly_project_data[month] = current_proyek_data.monthly_projects[month]
                         
                         if monthly_project_data:
                             fig_monthly_proj = chart_gen.create_monthly_bar_with_trendline(
                                 monthly_project_data,
-                                title="Jumlah Proyek per Bulan",
-                                show_trendline=True
+                                title=f"Jumlah Proyek Per-Bulan Tahun {report.year}",
+                                show_trendline=False # Reference image implies simple bars
                             )
-                            fig_monthly_proj.update_layout(height=400)
+                            # Customize to match blue pillars in reference
+                            fig_monthly_proj.update_traces(marker_color='#3498db', opacity=0.9)
+                            fig_monthly_proj.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
                             st.plotly_chart(fig_monthly_proj, use_container_width=True)
-                    
-                    with col2:
-                        # Project count by Kab/Kota (horizontal bar)
+                        
+                        # 2. Y-o-Y Chart
+                        if prev_proyek_data:
+                             # Logic for label
+                             if report.period_type == "Semester":
+                                 pass # Logic handled by calc, just label
+                             
+                             yoy_title = f"Jumlah Proyek: {report.period_name} {report.year - 1} & {report.period_name} {report.year} (y-o-y)"
+                             
+                             fig_yoy = chart_gen.create_comparison_bar_chart(
+                                 current_val=curr_total_proyek,
+                                 prev_val=prev_year_total_proyek,
+                                 current_label=f"{report.period_name} {report.year}",
+                                 prev_label=f"{report.period_name} {report.year - 1}",
+                                 title=yoy_title
+                             )
+                             st.plotly_chart(fig_yoy, use_container_width=True)
+                        else:
+                             st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
+
+                        # 3. Q-o-Q Chart
+                        if prev_q_total_proyek > 0 or curr_total_proyek > 0 and has_prev_q_data:
+                             qoq_title = f"Jumlah Proyek: {prev_q_label_text} & {report.period_name} {report.year} (q-o-q)"
+                             
+                             fig_qoq = chart_gen.create_comparison_bar_chart(
+                                 current_val=curr_total_proyek,
+                                 prev_val=prev_q_total_proyek,
+                                 current_label=f"{report.period_name} {report.year}",
+                                 prev_label=prev_q_label_text,
+                                 title=qoq_title
+                             )
+                             st.plotly_chart(fig_qoq, use_container_width=True)
+                        else:
+                             st.info(f"Data {prev_q_label_text} tidak tersedia untuk Q-o-Q")
+
+                    with col_right:
+                        # District (Kab/Kota) Chart - Tall
                         import plotly.graph_objects as go
-                        projects_by_kab = proyek_data.get_period_projects_by_wilayah(months)
+                        projects_by_kab = current_proyek_data.get_period_projects_by_wilayah(target_months)
+                        
                         if projects_by_kab:
-                            sorted_kab = dict(sorted(projects_by_kab.items(), key=lambda x: x[1], reverse=True)[:15])
+                            # Show ALL districts (or top 15 if too many) - reference showing many
+                            sorted_kab = dict(sorted(projects_by_kab.items(), key=lambda x: x[1], reverse=True)) # All sorted
+                            
                             fig_kab = go.Figure(data=[go.Bar(
                                 x=list(sorted_kab.values()), 
                                 y=list(sorted_kab.keys()), 
                                 orientation='h', 
-                                marker_color='#3B82F6'
+                                marker_color='#4a90e2',
+                                text=[f"{val:,}".replace(",", ".") for val in sorted_kab.values()],
+                                textposition='outside'
                             )])
+                            
                             fig_kab.update_layout(
-                                title='Jumlah Proyek per Kabupaten/Kota',
+                                title='Jumlah Proyek Berdasarkan Kabupaten/Kota',
                                 template='plotly_dark',
-                                height=400,
-                                yaxis={'categoryorder': 'total ascending'}
+                                height=750, # Taller chart to match reference
+                                yaxis={'categoryorder': 'total ascending'}, # High at top
+                                margin=dict(l=0, r=0, t=40, b=0),
+                                xaxis_title="Jumlah Proyek"
                             )
                             st.plotly_chart(fig_kab, use_container_width=True)
                     
-                    # Interpretation in Indonesian
-                    total_proyek = sum(monthly_project_data.values()) if monthly_project_data else 0
-                    top_month = max(monthly_project_data.items(), key=lambda x: x[1]) if monthly_project_data else ("", 0)
-                    top_kab = list(sorted_kab.items())[0] if projects_by_kab and sorted_kab else ("", 0)
+                    # Logic for narrative
+                    total_proyek = curr_total_proyek
+                    
+                    # Calculate growth stats for narrative
+                    if prev_year_total_proyek > 0:
+                        yoy_growth = ((curr_total_proyek - prev_year_total_proyek) / prev_year_total_proyek) * 100
+                        yoy_text = f"{'meningkat' if yoy_growth >= 0 else 'menurun'} sebesar <b>{abs(yoy_growth):.2f}%</b>"
+                    else:
+                        yoy_text = "tidak dapat dibandingkan (data tahun lalu tidak tersedia)"
+                        
+                    if prev_q_total_proyek > 0:
+                        qoq_growth = ((curr_total_proyek - prev_q_total_proyek) / prev_q_total_proyek) * 100
+                        qoq_text = f"{'meningkat' if qoq_growth >= 0 else 'menurun'} sebesar <b>{abs(qoq_growth):.2f}%</b>"
+                    else:
+                        qoq_text = "tidak dapat dibandingkan (data triwulan lalu tidak tersedia)"
+
+                    top_kab = list(sorted_kab.items())[0] if projects_by_kab else ("-", 0)
                     
                     interpretation = f"""
                     <b>Analisis dan Interpretasi:</b><br>
-                    Rekapitulasi data proyek di Provinsi Lampung periode {report.period_name} Tahun {report.year} 
-                    menunjukkan total sebanyak <b>{total_proyek:,}</b> proyek. 
-                    Jumlah proyek tertinggi tercatat pada bulan <b>{top_month[0]}</b> dengan <b>{top_month[1]:,}</b> proyek. 
-                    Berdasarkan lokasi, <b>{top_kab[0]}</b> mencatatkan jumlah proyek tertinggi sebanyak <b>{top_kab[1]:,}</b> proyek.
+                    Rekapitulasi jumlah proyek di Provinsi Lampung periode {report.period_name} Tahun {report.year} 
+                    adalah sebanyak <b>{total_proyek:,}</b> proyek. <br>
+                    Proyek tertinggi berada di lokasi <b>{top_kab[0]}</b> sebanyak <b>{top_kab[1]:,}</b> proyek.
+                    Jika dibandingkan dengan tahun sebelumnya ({report.period_name} {report.year-1}), mengalami {yoy_text}.
+                    Dan jika dibandingkan dengan triwulan sebelumnya ({prev_q_label_text}), mengalami {qoq_text}.
                     """
                     st.markdown(f'<div class="narrative-box">{interpretation}</div>', unsafe_allow_html=True)
             
