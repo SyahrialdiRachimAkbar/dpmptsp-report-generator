@@ -551,8 +551,15 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
         
         return text
     
-    def generate_pma_pmdn_comparison_narrative(self, pma_total: float, pmdn_total: float) -> str:
-        """Generate narrative for PMA vs PMDN comparison chart."""
+    def generate_pma_pmdn_comparison_narrative(self, pma_total: float, pmdn_total: float, unit_type: str = "investasi") -> str:
+        """
+        Generate narrative for PMA vs PMDN comparison chart.
+        
+        Args:
+            pma_total: Total PMA value/count
+            pmdn_total: Total PMDN value/count
+            unit_type: "investasi" (default) or "proyek"
+        """
         total = pma_total + pmdn_total
         if total <= 0:
             return ""
@@ -560,18 +567,28 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
         pma_pct = (pma_total / total * 100)
         pmdn_pct = (pmdn_total / total * 100)
         
+        # Context-aware text
+        if unit_type == "proyek":
+            context_noun = "proyek"
+            partisipasi_msg = "partisipasi"
+            attraction_msg = "minat investor"
+        else:
+            context_noun = "investasi"
+            partisipasi_msg = "partisipasi pengusaha"
+            attraction_msg = "daya tarik daerah bagi investor"
+
         if pmdn_total > pma_total:
             dominant = "PMDN"
             dominant_pct = pmdn_pct
             ratio = pmdn_total / pma_total if pma_total > 0 else 0
-            insight = f"Investasi domestik {ratio:.1f}x lebih besar dari investasi asing, menunjukkan kuatnya partisipasi pengusaha dalam negeri."
+            insight = f"{context_noun.capitalize()} domestik {ratio:.1f}x lebih besar dari asing, menunjukkan kuatnya {partisipasi_msg} dalam negeri."
         else:
             dominant = "PMA"
             dominant_pct = pma_pct
             ratio = pma_total / pmdn_total if pmdn_total > 0 else 0
-            insight = f"Investasi asing {ratio:.1f}x lebih besar dari domestik, menunjukkan daya tarik daerah bagi investor luar negeri."
+            insight = f"{context_noun.capitalize()} asing {ratio:.1f}x lebih besar dari domestik, menunjukkan tingginya {attraction_msg} luar negeri."
         
-        return f"Berdasarkan proporsi, {dominant} mendominasi dengan {dominant_pct:.1f}% dari total investasi. {insight}"
+        return f"Berdasarkan proporsi, {dominant} mendominasi dengan {dominant_pct:.1f}% dari total {context_noun}. {insight}"
     
     def generate_labor_narrative(self, tki_total: int, tka_total: int) -> str:
         """Generate narrative for labor absorption."""

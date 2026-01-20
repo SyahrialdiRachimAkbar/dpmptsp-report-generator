@@ -2062,26 +2062,26 @@ def render_report(report, stats: dict):
             st.markdown('<div class="section-title">2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             
-            # --- CALCULATE PMA/PMDN STATS ---
-            current_pma = current_investment.pma_total
-            current_pmdn = current_investment.pmdn_total
+            # --- CALCULATE PMA/PMDN STATS (PROJECT COUNTS) ---
+            current_pma = current_investment.pma_proyek
+            current_pmdn = current_investment.pmdn_proyek
             
             # Y-o-Y Stats
             prev_year_pma = 0
             prev_year_pmdn = 0
             if 'prev_proyek_data' in locals() and prev_proyek_data:
-                # Use helper in reference_loader via object method if available or sum directly
+                # Use helper in reference_loader via object method
                  # Note: prev_proyek_data is ProyekReferenceData object
-                 prev_year_pma = prev_proyek_data.get_period_pma(target_months)
-                 prev_year_pmdn = prev_proyek_data.get_period_pmdn(target_months)
+                 prev_year_pma = prev_proyek_data.get_period_pma_projects(target_months)
+                 prev_year_pmdn = prev_proyek_data.get_period_pmdn_projects(target_months)
             
             # Q-o-Q Stats
             prev_q_pma = 0
             prev_q_pmdn = 0
             if 'prev_q_source_data' in locals() and prev_q_source_data and 'prev_q_name' in locals():
                  prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
-                 prev_q_pma = prev_q_source_data.get_period_pma(prev_q_months)
-                 prev_q_pmdn = prev_q_source_data.get_period_pmdn(prev_q_months)
+                 prev_q_pma = prev_q_source_data.get_period_pma_projects(prev_q_months)
+                 prev_q_pmdn = prev_q_source_data.get_period_pmdn_projects(prev_q_months)
 
             # --- RENDER 2.2 CHARTS ---
             col1, col2, col3 = st.columns(3)
@@ -2091,7 +2091,7 @@ def render_report(report, stats: dict):
                 fig_status = chart_gen.create_simple_bar_chart(
                     labels=['PMA', 'PMDN'],
                     values=[current_pma, current_pmdn],
-                    title=f"Status Penanaman Modal {report.period_name} {report.year}",
+                    title=f"Jumlah Proyek Berdasarkan Status PM {report.period_name} {report.year}",
                     color='#9b59b6' # Purple
                 )
                 st.plotly_chart(fig_status, use_container_width=True)
@@ -2115,7 +2115,7 @@ def render_report(report, stats: dict):
                          current_period_label=f"{report.period_name} {report.year}",
                          prev_period_label=f"{report.period_name} {report.year - 1}",
                          title=yoy_title,
-                         y_axis_title="Nilai Investasi (Rp)"
+                         y_axis_title="Jumlah Proyek"
                      )
                      st.plotly_chart(fig_yoy, use_container_width=True)
                 else:
@@ -2136,7 +2136,7 @@ def render_report(report, stats: dict):
                          current_period_label=f"{report.period_name} {report.year}",
                          prev_period_label=prev_q_label_text,
                          title=qoq_title,
-                         y_axis_title="Nilai Investasi (Rp)"
+                         y_axis_title="Jumlah Proyek"
                      )
                      st.plotly_chart(fig_qoq, use_container_width=True)
                 else:
@@ -2144,8 +2144,9 @@ def render_report(report, stats: dict):
 
             # Narrative for 2.2
             pma_pmdn_narr = narrative_gen.generate_pma_pmdn_comparison_narrative(
-                current_investment.pma_total,
-                current_investment.pmdn_total
+                current_pma,
+                current_pmdn,
+                unit_type="proyek"
             )
             if pma_pmdn_narr:
                 st.markdown(f'<div class="narrative-box">{pma_pmdn_narr}</div>', unsafe_allow_html=True)
