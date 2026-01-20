@@ -1404,25 +1404,166 @@ def render_report(report, stats: dict):
     st.markdown(f'<div class="narrative-box">{narratives.rekapitulasi_kab_kota}</div>', 
                 unsafe_allow_html=True)
     
-    # Section 4: Status PM
-    st.markdown('<div class="section-title">1.3 Status Penanaman Modal</div>', 
+    # Section 4: Status PM - Redesigned Layout
+    st.markdown('<div class="section-title">1.3 Rekapitulasi Data NIB Berdasarkan Status Penanaman Modal</div>', 
                 unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # Get PM distribution from stats
+    pm_dist = stats.get('pm_distribution', {})
+    current_pma = pm_dist.get('PMA', 0)
+    current_pmdn = pm_dist.get('PMDN', 0)
     
-    with col1:
-        pm_dist = stats.get('pm_distribution', {})
-        fig_pm = chart_gen.create_pm_comparison_chart(
-            pma_total=pm_dist.get('PMA', 0),
-            pmdn_total=pm_dist.get('PMDN', 0)
+    # Calculate TW-level PM data for comparisons (for Semester periods)
+    tw1_pma, tw1_pmdn, tw2_pma, tw2_pmdn = 0, 0, 0, 0
+    prev_year_tw_pma, prev_year_tw_pmdn = 0, 0
+    
+    if report.period_type == "Semester" and report.period_name == "Semester I":
+        tw1_months = TRIWULAN_KE_BULAN["TW I"]
+        tw2_months = TRIWULAN_KE_BULAN["TW II"]
+        
+        if current_full_data:
+            # Get TW I PM totals
+            tw1_pm = current_full_data.get_period_by_pm_status(tw1_months)
+            tw1_pma = tw1_pm.get('PMA', 0)
+            tw1_pmdn = tw1_pm.get('PMDN', 0)
+            
+            # Get TW II PM totals
+            tw2_pm = current_full_data.get_period_by_pm_status(tw2_months)
+            tw2_pma = tw2_pm.get('PMA', 0)
+            tw2_pmdn = tw2_pm.get('PMDN', 0)
+        
+        if prev_full_data:
+            # Get TW II prev year PM totals
+            prev_tw2_pm = prev_full_data.get_period_by_pm_status(tw2_months)
+            prev_year_tw_pma = prev_tw2_pm.get('PMA', 0)
+            prev_year_tw_pmdn = prev_tw2_pm.get('PMDN', 0)
+            
+    elif report.period_type == "Semester" and report.period_name == "Semester II":
+        tw3_months = TRIWULAN_KE_BULAN["TW III"]
+        tw4_months = TRIWULAN_KE_BULAN["TW IV"]
+        
+        if current_full_data:
+            tw3_pm = current_full_data.get_period_by_pm_status(tw3_months)
+            tw1_pma = tw3_pm.get('PMA', 0)  # Using tw1 var for "first TW of semester"
+            tw1_pmdn = tw3_pm.get('PMDN', 0)
+            
+            tw4_pm = current_full_data.get_period_by_pm_status(tw4_months)
+            tw2_pma = tw4_pm.get('PMA', 0)  # Using tw2 var for "second TW of semester"
+            tw2_pmdn = tw4_pm.get('PMDN', 0)
+        
+        if prev_full_data:
+            prev_tw4_pm = prev_full_data.get_period_by_pm_status(tw4_months)
+            prev_year_tw_pma = prev_tw4_pm.get('PMA', 0)
+            prev_year_tw_pmdn = prev_tw4_pm.get('PMDN', 0)
+    
+    elif report.period_type == "Triwulan":
+        # For Triwulan, use current period as current and prev Q for comparison
+        if current_full_data:
+            curr_pm = current_full_data.get_period_by_pm_status(target_months)
+            tw2_pma = curr_pm.get('PMA', 0)
+            tw2_pmdn = curr_pm.get('PMDN', 0)
+        
+        if has_prev_q_data and current_full_data:
+            prev_q_pm_months = TRIWULAN_KE_BULAN.get(prev_q_label.split()[0] + " " + prev_q_label.split()[1], []) if len(prev_q_label.split()) >= 2 else []
+            if prev_q_label.startswith("TW"):
+                tw_name = " ".join(prev_q_label.split()[:2])
+                if tw_name in TRIWULAN_KE_BULAN:
+                    prev_q_pm_data = current_full_data.get_period_by_pm_status(TRIWULAN_KE_BULAN[tw_name])
+                    tw1_pma = prev_q_pm_data.get('PMA', 0)
+                    tw1_pmdn = prev_q_pm_data.get('PMDN', 0)
+        
+        if prev_full_data:
+            prev_year_pm = prev_full_data.get_period_by_pm_status(target_months)
+            prev_year_tw_pma = prev_year_pm.get('PMA', 0)
+            prev_year_tw_pmdn = prev_year_pm.get('PMDN', 0)
+    
+    # === Row 1: PM Bar Chart + Table ===
+    col_pm1, col_pm2 = st.columns([1, 1.5])
+    
+    with col_pm1:
+        # Bar chart for current period PM distribution
+        fig_pm_bar = chart_gen.create_pm_comparison_chart(
+            pma_total=current_pma,
+            pmdn_total=current_pmdn,
+            title=f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {report.period_name.upper()} {report.year}"
         )
-        st.plotly_chart(fig_pm, use_container_width=True)
+        st.plotly_chart(fig_pm_bar, use_container_width=True)
     
-    with col2:
-        # PM table per kab/kota
-        if not df.empty:
-            pm_df = df[['Kabupaten/Kota', 'PMA', 'PMDN']]
-            st.markdown(df_to_html_table(pm_df), unsafe_allow_html=True)
+    with col_pm2:
+        # Detailed table with PM breakdown
+        if not df.empty and 'Kabupaten/Kota' in df.columns:
+            pm_table_cols = ['Kabupaten/Kota', 'PMA', 'PMDN', 'Total']
+            if all(c in df.columns for c in ['PMA', 'PMDN']):
+                pm_df = df[pm_table_cols].copy() if 'Total' in df.columns else df[['Kabupaten/Kota', 'PMA', 'PMDN']].copy()
+                if 'Total' not in pm_df.columns:
+                    pm_df['Total'] = pm_df['PMA'] + pm_df['PMDN']
+                st.markdown(df_to_html_table(pm_df, max_rows=15), unsafe_allow_html=True)
+    
+    # === Row 2: Y-o-Y and Q-o-Q PM Comparison Charts ===
+    col_pm_yoy, col_pm_qoq = st.columns(2)
+    
+    with col_pm_yoy:
+        # Y-o-Y PM Comparison
+        if prev_full_data and (prev_year_tw_pma > 0 or prev_year_tw_pmdn > 0):
+            if report.period_type == "Semester":
+                if report.period_name == "Semester I":
+                    yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN II {report.year - 1} & TRIWULAN II {report.year} (y-o-y)"
+                    curr_label = f"TW II {report.year}"
+                    prev_label = f"TW II {report.year - 1}"
+                    yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
+                else:
+                    yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN IV {report.year - 1} & TRIWULAN IV {report.year} (y-o-y)"
+                    curr_label = f"TW IV {report.year}"
+                    prev_label = f"TW IV {report.year - 1}"
+                    yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
+            else:
+                yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {report.period_name} {report.year - 1} & {report.period_name} {report.year} (y-o-y)"
+                curr_label = f"{report.period_name} {report.year}"
+                prev_label = f"{report.period_name} {report.year - 1}"
+                yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
+            
+            fig_pm_yoy = chart_gen.create_pm_grouped_comparison(
+                current_pma=yoy_curr_pma,
+                current_pmdn=yoy_curr_pmdn,
+                prev_pma=prev_year_tw_pma,
+                prev_pmdn=prev_year_tw_pmdn,
+                current_label=curr_label,
+                prev_label=prev_label,
+                title=yoy_title
+            )
+            st.plotly_chart(fig_pm_yoy, use_container_width=True)
+        else:
+            st.info("Upload file tahun sebelumnya untuk melihat perbandingan Y-o-Y per Status PM")
+    
+    with col_pm_qoq:
+        # Q-o-Q PM Comparison
+        if tw1_pma > 0 or tw1_pmdn > 0 or tw2_pma > 0 or tw2_pmdn > 0:
+            if report.period_type == "Semester":
+                if report.period_name == "Semester I":
+                    qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN I {report.year} & TRIWULAN II {report.year} (q-o-q)"
+                    curr_label = f"TW II {report.year}"
+                    prev_label = f"TW I {report.year}"
+                else:
+                    qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE TRIWULAN III {report.year} & TRIWULAN IV {report.year} (q-o-q)"
+                    curr_label = f"TW IV {report.year}"
+                    prev_label = f"TW III {report.year}"
+            else:
+                qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nBERDASARKAN STATUS PENANAMAN MODAL\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
+                curr_label = f"{report.period_name} {report.year}"
+                prev_label = prev_q_label
+            
+            fig_pm_qoq = chart_gen.create_pm_grouped_comparison(
+                current_pma=tw2_pma,
+                current_pmdn=tw2_pmdn,
+                prev_pma=tw1_pma,
+                prev_pmdn=tw1_pmdn,
+                current_label=curr_label,
+                prev_label=prev_label,
+                title=qoq_title
+            )
+            st.plotly_chart(fig_pm_qoq, use_container_width=True)
+        else:
+            st.info("Data triwulan sebelumnya tidak tersedia untuk perbandingan Q-o-Q per Status PM")
     
     st.markdown(f'<div class="narrative-box">{narratives.status_pm}</div>', 
                 unsafe_allow_html=True)

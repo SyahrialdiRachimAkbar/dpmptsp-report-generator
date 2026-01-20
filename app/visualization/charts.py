@@ -390,6 +390,97 @@ class ChartGenerator:
         
         return fig
     
+    def create_pm_grouped_comparison(
+        self,
+        current_pma: int,
+        current_pmdn: int,
+        prev_pma: int,
+        prev_pmdn: int,
+        current_label: str,
+        prev_label: str,
+        title: str = "Perbandingan Status PM"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart comparing PMA and PMDN between two periods.
+        
+        Shows side-by-side bars for each PM status with percentage change annotations.
+        
+        Args:
+            current_pma: Current period PMA count
+            current_pmdn: Current period PMDN count
+            prev_pma: Previous period PMA count
+            prev_pmdn: Previous period PMDN count
+            current_label: Label for current period (e.g., "TW II 2025")
+            prev_label: Label for previous period (e.g., "TW II 2024")
+            title: Chart title
+            
+        Returns:
+            Plotly Figure object
+        """
+        categories = ['PMA', 'PMDN']
+        prev_values = [prev_pma, prev_pmdn]
+        current_values = [current_pma, current_pmdn]
+        
+        # Calculate percentage changes
+        def calc_pct_change(curr, prev):
+            if prev == 0:
+                return 100.0 if curr > 0 else 0.0
+            return ((curr - prev) / prev) * 100
+        
+        pma_pct = calc_pct_change(current_pma, prev_pma)
+        pmdn_pct = calc_pct_change(current_pmdn, prev_pmdn)
+        pct_changes = [pma_pct, pmdn_pct]
+        
+        fig = go.Figure()
+        
+        # Previous period bars (orange/salmon)
+        fig.add_trace(go.Bar(
+            name=prev_label,
+            x=categories,
+            y=prev_values,
+            text=[f"{v:,}".replace(",", ".") for v in prev_values],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)',  # Orange
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Current period bars (green/blue)
+        fig.add_trace(go.Bar(
+            name=current_label,
+            x=categories,
+            y=current_values,
+            text=[f"{v:,}".replace(",", ".") for v in current_values],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)',  # Teal/green
+            textfont={'size': 12, 'color': self.COLORS['text']}
+        ))
+        
+        # Add percentage change annotations
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#2ecc71' if pct >= 0 else '#e74c3c'  # Green for positive, red for negative
+            arrow = '↑' if pct >= 0 else '↓'
+            fig.add_annotation(
+                x=cat,
+                y=max(prev_values[i], current_values[i]) * 1.15,
+                text=f"{arrow}{abs(pct):.2f}%",
+                showarrow=False,
+                font={'size': 12, 'color': color, 'weight': 'bold'}
+            )
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': ''},
+            yaxis={'title': 'Jumlah NIB'},
+            width=self.width,
+            height=self.height,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        
+        return fig
+    
     def create_pelaku_usaha_chart(
         self,
         umk_total: int,
