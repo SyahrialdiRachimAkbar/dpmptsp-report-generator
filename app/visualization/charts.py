@@ -729,6 +729,104 @@ class ChartGenerator:
         
         return fig
 
+    def _format_currency_label(self, value: float) -> str:
+        """Format large numbers to T (Triliun) or M (Miliar) or standard."""
+        if abs(value) >= 1e12:
+            return f"{value/1e12:.2f}T"
+        elif abs(value) >= 1e9:
+            return f"{value/1e9:.2f}M"
+        else:
+            return f"{value:,.0f}".replace(",", ".")
+
+    def create_grouped_comparison_multi_category(
+        self,
+        categories: list,
+        current_values: list,
+        prev_values: list,
+        current_label: str,
+        prev_label: str,
+        title: str,
+        y_axis_title: str = "Jumlah"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart comparing multiple categories between two periods.
+        Used for Skala Usaha (4 categories).
+        """
+        fig = go.Figure()
+        
+        # Calculate percentages
+        def calc_pct_change(curr, prev):
+            if prev == 0:
+                return 100.0 if curr > 0 else 0.0
+            return ((curr - prev) / prev) * 100
+        
+        pct_changes = [calc_pct_change(c, p) for c, p in zip(current_values, prev_values)]
+        
+        # Determine formatting based on magnitude (if mostly large numbers, assume currency)
+        max_val = max(max(current_values), max(prev_values)) if current_values and prev_values else 0
+        is_currency = max_val > 1e9
+        
+        def format_val(v):
+            return self._format_currency_label(v) if is_currency else f"{v:,.0f}".replace(",", ".")
+
+        # Previous period bars
+        fig.add_trace(go.Bar(
+            name=prev_label,
+            x=categories,
+            y=prev_values,
+            text=[format_val(v) for v in prev_values],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)', # Orange
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        # Current period bars
+        fig.add_trace(go.Bar(
+            name=current_label,
+            x=categories,
+            y=current_values,
+            text=[format_val(v) for v in current_values],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)', # Teal
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        # Add percentage stats (Annotations)
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            color = '#2ecc71' if pct >= 0 else '#e74c3c'
+            arrow = '↑' if pct >= 0 else '↓'
+            
+            base_y = max(prev_values[i], current_values[i])
+            if base_y == 0: base_y = 1
+            
+            if prev_values[i] == 0 and current_values[i] == 0:
+                 text_an = "0%"
+            elif prev_values[i] == 0:
+                 text_an = f"{arrow}100%"
+            else:
+                 text_an = f"{arrow}{abs(pct):.1f}%"
+            
+            fig.add_annotation(
+                x=cat,
+                y=base_y * 1.15,
+                text=text_an,
+                showarrow=False,
+                font={'size': 11, 'color': color, 'weight': 'bold'}
+            )
+            
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis={'title': ''},
+            yaxis={'title': y_axis_title},
+            width=self.width,
+            height=400,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        return fig
+
     def create_grouped_comparison_two_categories(
         self,
         curr_val1: int,
@@ -779,7 +877,7 @@ class ChartGenerator:
             name=prev_period_label,
             x=categories,
             y=prev_values,
-            text=[f"{v:,.0f}".replace(",", ".") for v in prev_values],
+            text=[self._format_currency_label(v) for v in prev_values],
             textposition='outside',
             marker_color='rgba(255, 159, 64, 0.8)', # Orange
             textfont={'size': 12, 'color': self.COLORS['text']}
@@ -790,7 +888,7 @@ class ChartGenerator:
             name=current_period_label,
             x=categories,
             y=current_values,
-            text=[f"{v:,.0f}".replace(",", ".") for v in current_values],
+            text=[self._format_currency_label(v) for v in current_values],
             textposition='outside',
             marker_color='rgba(75, 192, 192, 0.8)', # Teal
             textfont={'size': 12, 'color': self.COLORS['text']}
