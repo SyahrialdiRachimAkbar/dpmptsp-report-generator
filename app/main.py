@@ -1197,9 +1197,17 @@ def render_report(report, stats: dict):
              st.error(f"Error loading previous NIB file: {e}")
 
     # 2. Determine Target Months
+    # Define Semester mappings (not in config, so define here)
+    SEMESTER_KE_BULAN = {
+        "Semester I": ["Januari", "Februari", "Maret", "April", "Mei", "Juni"],
+        "Semester II": ["Juli", "Agustus", "September", "Oktober", "November", "Desember"],
+    }
+    
     target_months = []
     if report.period_type == "Triwulan" and report.period_name in TRIWULAN_KE_BULAN:
         target_months = TRIWULAN_KE_BULAN[report.period_name]
+    elif report.period_type == "Semester" and report.period_name in SEMESTER_KE_BULAN:
+        target_months = SEMESTER_KE_BULAN[report.period_name]
     elif report.period_type == "Tahunan":
         target_months = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
 
