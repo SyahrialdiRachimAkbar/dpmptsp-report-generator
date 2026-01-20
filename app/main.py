@@ -1642,32 +1642,35 @@ def render_report(report, stats: dict):
     st.markdown('<div class="section-title">1.4 Rekapitulasi Data NIB Berdasarkan Pelaku Usaha</div>', 
                 unsafe_allow_html=True)
     
-    # Get Pelaku Usaha distribution from stats
-    pelaku_dist = stats.get('pelaku_usaha_distribution', {})
-    current_umk = pelaku_dist.get('UMK', 0)
-    current_non_umk = pelaku_dist.get('NON_UMK', 0)
-    
     # Helper to aggregate Skala Usaha (Mikro+Kecil -> UMK, Menengah+Besar -> NON-UMK)
     def aggregate_pelaku_usaha(full_data_obj, months_list):
         if not full_data_obj:
             return 0, 0
-        skala_data = full_data_obj.get_period_by_skala_usaha(months_list)
-        # Normalize keys to title case just in case
-        normalized_data = {k.title(): v for k, v in skala_data.items()}
-        
-        umk_val = normalized_data.get('Mikro', 0) + normalized_data.get('Kecil', 0)
-        # Check for direct 'UMK' key if data source differs
-        if 'Umk' in normalized_data:
-            umk_val += normalized_data['Umk']
             
-        non_umk_val = normalized_data.get('Menengah', 0) + normalized_data.get('Besar', 0)
-        # Check for direct 'NON-UMK' or 'Non-Umk' key
-        if 'Non-Umk' in normalized_data:
-            non_umk_val += normalized_data['Non-Umk']
-        elif 'Non Umk' in normalized_data:
-            non_umk_val += normalized_data['Non Umk']
+        skala_data = full_data_obj.get_period_by_skala_usaha(months_list)
+        umk_val = 0
+        non_umk_val = 0
+        
+        # Iterate through all keys to perform robust matching
+        for key, val in skala_data.items():
+            k_upper = str(key).upper()
+            if 'MIKRO' in k_upper or 'KECIL' in k_upper or 'UMK' in k_upper:
+                # Avoid double counting if key is "NON UMK"
+                if 'NON' in k_upper:
+                    non_umk_val += val
+                else:
+                    umk_val += val
+            elif 'MENENGAH' in k_upper or 'BESAR' in k_upper:
+                non_umk_val += val
+            elif 'NON' in k_upper: # Fallback for "NON UMK" or similar
+                non_umk_val += val
             
         return umk_val, non_umk_val
+
+    # Calculate current period totals using robust helper
+    current_umk, current_non_umk = 0, 0
+    if current_full_data:
+        current_umk, current_non_umk = aggregate_pelaku_usaha(current_full_data, target_months)
 
     # Calculate TW-level Pelaku Usaha data for comparisons
     tw1_umk, tw1_non_umk, tw2_umk, tw2_non_umk = 0, 0, 0, 0
