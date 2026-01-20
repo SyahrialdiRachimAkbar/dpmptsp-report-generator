@@ -2596,9 +2596,15 @@ def render_report(report, stats: dict):
             sector_data = pb_data.get_period_sector(months)
             if sector_data and sum(sector_data.values()) > 0:
                 import plotly.graph_objects as go
-                sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
+                # Show ALL sectors, sorted
+                sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True))
+                
+                # Dynamic height based on number of sectors
+                num_sectors = len(sorted_sector)
+                chart_height = max(400, num_sectors * 30 + 100)
+                
                 fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
-                fig.update_layout(title='Perizinan per Sektor (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                fig.update_layout(title='Perizinan per Sektor', template='plotly_dark', height=chart_height, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Data sektor kementerian/lembaga tidak tersedia atau kosong.")

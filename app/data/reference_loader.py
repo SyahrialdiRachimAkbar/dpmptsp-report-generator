@@ -671,7 +671,7 @@ class ReferenceDataLoader:
                 
                 # Count permits by sector
                 if sector_col:
-                    sector_counts = month_df[sector_col].value_counts().head(10)  # Top 10 sectors
+                    sector_counts = month_df[sector_col].value_counts()  # All sectors
                     result.monthly_sector[month] = dict(sector_counts)
                 
                 # Count permits by Kab/Kota
