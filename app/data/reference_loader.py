@@ -801,22 +801,36 @@ class ReferenceDataLoader:
                     result.monthly_by_skala_usaha[month] = dict(skala_counts)
                 
                 # Labor by Wilayah (TKI+TKA combined per wilayah)
-                # FIX: Deduplicate by Project ID to prevent double counting
+                # FIX: Deduplicate by Project ID to prevent double counting (Vectorized)
                 if wilayah_col and (tki_col or tka_col):
                     labor_by_wil = {}
-                    for wil in month_df[wilayah_col].dropna().unique():
-                        wil_df = month_df[month_df[wilayah_col] == wil]
-                        
-                        # Dedup if ID column exists
-                        if id_col:
-                            # Keep first occurrence of each project in this district
-                            calc_df = wil_df.drop_duplicates(subset=[id_col])
-                        else:
-                            calc_df = wil_df
+                    
+                    # 1. Prepare Calculation DataFrame
+                    if id_col:
+                        # Keep one row per (Wilayah, ProjectID) to avoid double counting labor
+                        # This works globally instead of looping per district
+                        calc_df = month_df.drop_duplicates(subset=[wilayah_col, id_col])
+                    else:
+                        calc_df = month_df
+                    
+                    # 2. GroupBy and Sum (High Performance)
+                    cols_to_sum = []
+                    if tki_col: cols_to_sum.append(tki_col)
+                    if tka_col: cols_to_sum.append(tka_col)
+                    
+                    if cols_to_sum:
+                        # Ensure numeric types
+                        for col in cols_to_sum:
+                            calc_df[col] = pd.to_numeric(calc_df[col], errors='coerce').fillna(0)
                             
-                        tki_sum = int(calc_df[tki_col].sum()) if tki_col else 0
-                        tka_sum = int(calc_df[tka_col].fillna(0).sum()) if tka_col else 0
-                        labor_by_wil[wil] = tki_sum + tka_sum
+                        sums = calc_df.groupby(wilayah_col)[cols_to_sum].sum()
+                        
+                        # 3. Convert to Dictionary
+                        for wil, row in sums.iterrows():
+                            tki_sum = row[tki_col] if tki_col in row else 0
+                            tka_sum = row[tka_col] if tka_col in row else 0
+                            labor_by_wil[wil] = int(tki_sum + tka_sum)
+                            
                     result.monthly_labor_by_wilayah[month] = labor_by_wil
                 
                 # Project count by Wilayah
