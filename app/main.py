@@ -657,6 +657,10 @@ def init_session_state():
         st.session_state.current_pb_data = None
     if 'prev_pb_data' not in st.session_state:
         st.session_state.prev_pb_data = None
+    if 'current_nib_data' not in st.session_state:
+        st.session_state.current_nib_data = None
+    if 'prev_nib_data' not in st.session_state:
+        st.session_state.prev_nib_data = None
 
 
 def df_to_html_table(df: pd.DataFrame, max_rows: int = 15) -> str:
@@ -848,7 +852,8 @@ def render_sidebar():
                              'report', 'stats', 'aggregator', 'investment_reports', 
                              'tw_summary', 'prev_year_tw_summary',
                              'current_proyek_data', 'prev_proyek_data',
-                             'current_pb_data', 'prev_pb_data']
+                             'current_pb_data', 'prev_pb_data',
+                             'current_nib_data', 'prev_nib_data']
             for col in cols_to_clear:
                 if col in st.session_state:
                     del st.session_state[col]
@@ -901,6 +906,12 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
         try:
             # Use cached loader for performance
             nib_data = _cached_load_nib(nib_file.getvalue(), nib_file.name, tahun)
+            st.session_state.current_nib_data = nib_data
+            
+            # Pre-load previous year NIB if available
+            nib_prev_file = st.session_state.get('nib_prev_ref_file')
+            if nib_prev_file:
+                 st.session_state.prev_nib_data = _cached_load_nib(nib_prev_file.getvalue(), nib_prev_file.name, tahun - 1)
             
             if nib_data:
                 # Create PeriodReport structure manually
@@ -1298,18 +1309,20 @@ def render_report(report, stats: dict):
     
     # 1. Load Full Data for Current and Previous Year
     current_full_data = None
-    if current_nib_file:
+    # Use Pre-Loaded Data from Session State
+    current_full_data = st.session_state.get('current_nib_data')
+    # Backward compatibility if not in session (e.g. old session)
+    if current_full_data is None and current_nib_file:
          try:
              current_full_data = ref_loader.load_nib(current_nib_file.getvalue(), current_nib_file.name)
-         except Exception as e:
-             st.error(f"Error loading current NIB file: {e}")
+         except Exception: pass
 
     prev_full_data = None
-    if prev_nib_file:
+    prev_full_data = st.session_state.get('prev_nib_data')
+    if prev_full_data is None and prev_nib_file:
          try:
              prev_full_data = ref_loader.load_nib(prev_nib_file.getvalue(), prev_nib_file.name)
-         except Exception as e:
-             st.error(f"Error loading previous NIB file: {e}")
+         except Exception: pass
 
     # 2. Determine Target Months
     # Define Semester mappings (not in config, so define here)
