@@ -648,6 +648,15 @@ def init_session_state():
         st.session_state.tw_summary = None  # Dict[str, TWSummary] for current year
     if 'prev_year_tw_summary' not in st.session_state:
         st.session_state.prev_year_tw_summary = None  # Dict[str, TWSummary] for previous year
+    # Persisted Data Objects (to avoid reloading in render loop)
+    if 'current_proyek_data' not in st.session_state:
+        st.session_state.current_proyek_data = None
+    if 'prev_proyek_data' not in st.session_state:
+        st.session_state.prev_proyek_data = None
+    if 'current_pb_data' not in st.session_state:
+        st.session_state.current_pb_data = None
+    if 'prev_pb_data' not in st.session_state:
+        st.session_state.prev_pb_data = None
 
 
 def df_to_html_table(df: pd.DataFrame, max_rows: int = 15) -> str:
@@ -837,7 +846,9 @@ def render_sidebar():
         if st.button("🗑️ Clear Data", use_container_width=True):
             cols_to_clear = ['nib_ref_file', 'pb_oss_ref_file', 'proyek_ref_file', 
                              'report', 'stats', 'aggregator', 'investment_reports', 
-                             'tw_summary', 'prev_year_tw_summary']
+                             'tw_summary', 'prev_year_tw_summary',
+                             'current_proyek_data', 'prev_proyek_data',
+                             'current_pb_data', 'prev_pb_data']
             for col in cols_to_clear:
                 if col in st.session_state:
                     del st.session_state[col]
@@ -968,6 +979,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
         try:
             # Use cached loader for performance
             pb_data = _cached_load_pb_oss(pb_file.getvalue(), pb_file.name, tahun)
+            st.session_state.current_pb_data = pb_data
+
+            # Pre-load previous year PB OSS if available
+            pb_prev_file = st.session_state.get('pb_oss_prev_ref_file')
+            if pb_prev_file:
+                 st.session_state.prev_pb_data = _cached_load_pb_oss(pb_prev_file.getvalue(), pb_prev_file.name, tahun - 1)
+            
             
             if pb_data:
                 # Get risk and sector distribution for selected period
@@ -1000,6 +1018,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
         try:
             # Use cached loader for performance
             proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, tahun)
+            st.session_state.current_proyek_data = proyek_data
+            
+            # Pre-load previous year Proyek if available
+            proyek_prev_file = st.session_state.get('proyek_prev_ref_file')
+            if proyek_prev_file:
+                st.session_state.prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, tahun - 1)
+            
             
             if proyek_data:
                 investment_reports = {} # Dict[periode_name, InvestmentReport]
@@ -1930,13 +1955,11 @@ def render_report(report, stats: dict):
                 from app.data.reference_loader import ReferenceDataLoader
                 loader = ReferenceDataLoader()
                 
-                # Load Current Data
-                current_proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
+                # Use Pre-Loaded Data from Session State
+                current_proyek_data = st.session_state.get('current_proyek_data')
                 
                 # Load Previous Data (if available)
-                prev_proyek_data = None
-                if proyek_prev_file:
-                    prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, report.year - 1)
+                prev_proyek_data = st.session_state.get('prev_proyek_data')
                 
                 # Calculate Stats
                 target_months = loader.get_months_for_period(report.period_type, report.period_name)
@@ -2416,7 +2439,7 @@ def render_report(report, stats: dict):
         st.markdown('<div class="section-title">3. Perizinan Berusaha Berbasis Risiko Provinsi Lampung</div>', 
                     unsafe_allow_html=True)
         
-        pb_data = _cached_load_pb_oss(pb_oss_file.getvalue(), pb_oss_file.name, report.year)
+        pb_data = st.session_state.get('current_pb_data')
         
         if pb_data:
             from app.data.reference_loader import ReferenceDataLoader
@@ -2465,10 +2488,8 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             
             # --- Load Previous Data for Comparisons ---
-            pb_prev_file = st.session_state.get('pb_oss_prev_ref_file')
-            prev_pb_data = None
-            if pb_prev_file:
-                prev_pb_data = _cached_load_pb_oss(pb_prev_file.getvalue(), pb_prev_file.name, report.year - 1)
+            # Use Pre-Loaded Data from Session State
+            prev_pb_data = st.session_state.get('prev_pb_data')
             
             prev_q_pb_data = None
             prev_q_name_pb = None
