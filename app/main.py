@@ -2713,12 +2713,84 @@ def render_report(report, stats: dict):
             # 3.3 Risk Level
             st.markdown('<div class="section-title">3.3 Rekapitulasi Berdasarkan Tingkat Risiko</div>', 
                         unsafe_allow_html=True)
+            
+            # 1. Calc Current Risk
             risk_data = pb_data.get_period_risk(months)
+            
+            # 2. Calc YoY Risk
+            prev_year_risk = {}
+            if prev_pb_data:
+                 prev_year_risk = prev_pb_data.get_period_risk(months)
+            
+            # 3. Calc QoQ Risk
+            prev_q_risk = {}
+            if prev_q_pb_data and prev_q_name_pb in TRIWULAN_KE_BULAN:
+                 prev_q_months_pb = TRIWULAN_KE_BULAN[prev_q_name_pb]
+                 prev_q_risk = prev_q_pb_data.get_period_risk(prev_q_months_pb)
+
             if risk_data:
                 import plotly.graph_objects as go
-                fig = go.Figure(data=[go.Bar(x=list(risk_data.keys()), y=list(risk_data.values()), marker_color=['#22C55E', '#EAB308', '#EF4444', '#8B5CF6'][:len(risk_data)])])
-                fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_dark', height=350)
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # Manual sort order for Risk
+                risk_order = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
+                sorted_risk_val = [risk_data.get(k, 0) for k in risk_order]
+                
+                # CHART 1: Current Distribution (Full Width)
+                fig_risk = go.Figure(data=[go.Bar(
+                    x=sorted_risk_val, 
+                    y=risk_order, 
+                    orientation='h',
+                    marker_color=['#10B981', '#FBBF24', '#F59E0B', '#EF4444']
+                )])
+                fig_risk.update_layout(
+                    title='Perizinan per Tingkat Risiko (Urut)', 
+                    template='plotly_dark', 
+                    height=400
+                )
+                st.plotly_chart(fig_risk, use_container_width=True)
+                
+                # ROW 2: Comparisons
+                col33_1, col33_2 = st.columns(2)
+                
+                with col33_1:
+                    # YoY Risk Chart
+                    if prev_year_risk:
+                         fig_yoy_risk = chart_gen.create_risk_grouped_comparison(
+                             current_data=risk_data,
+                             prev_data=prev_year_risk,
+                             current_label=f"{report.year}",
+                             prev_label=f"{report.year - 1}",
+                             title="Risiko Y-o-Y"
+                         )
+                         st.plotly_chart(fig_yoy_risk, use_container_width=True)
+                    else:
+                         st.info("Upload file PB OSS tahun lalu untuk Y-o-Y (Risiko)")
+
+                with col33_2:
+                    # QoQ Risk Chart
+                    if prev_q_risk:
+                         fig_qoq_risk = chart_gen.create_risk_grouped_comparison(
+                             current_data=risk_data,
+                             prev_data=prev_q_risk,
+                             current_label=f"{report.period_name}",
+                             prev_label=f"{prev_q_name_pb}",
+                             title="Risiko Q-o-Q"
+                         )
+                         st.plotly_chart(fig_qoq_risk, use_container_width=True)
+                    else:
+                         st.info("Data Q-o-Q tidak tersedia")
+
+                # Narrative
+                narrative_3_3 = narrative_gen.generate_risk_comparison_narrative(
+                    report=report,
+                    current_data=risk_data,
+                    prev_year_data=prev_year_risk,
+                    prev_q_data=prev_q_risk,
+                    prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya"
+                )
+                st.markdown(f'<div class="narrative-box">{narrative_3_3}</div>', unsafe_allow_html=True)
+            else:
+                st.info("Data tingkat risiko tidak tersedia")
             
             # 3.4 Sector
             st.markdown('<div class="section-title">3.4 Rekapitulasi Berdasarkan Sektor Kementerian/Lembaga</div>', 

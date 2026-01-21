@@ -544,6 +544,92 @@ class ChartGenerator:
         )
         
         return fig
+    
+    def create_risk_grouped_comparison(
+        self,
+        current_data: Dict[str, int],
+        prev_data: Dict[str, int],
+        current_label: str,
+        prev_label: str,
+        title: str = "Perbandingan Tingkat Risiko"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart comparing Risk Levels between two periods.
+        Enforces order: Rendah, Menengah Rendah, Menengah Tinggi, Tinggi.
+        """
+        # Strict Order
+        categories = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
+        
+        # Map input keys to standard categories case-insensitively if needed, 
+        # but usually data coming from reference_loader is already titled correctly.
+        # We'll use a lookup helper just in case, or assuming exact matches if loader standardizes.
+        # Loader uses: 'Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi' (Title Case)
+        
+        curr_vals = [current_data.get(cat, 0) for cat in categories]
+        prev_vals = [prev_data.get(cat, 0) for cat in categories]
+        
+        fig = go.Figure()
+        
+        # Calculate pct changes for annotation
+        def calc_pct(c, p):
+             if p == 0: return 100.0 if c > 0 else 0.0
+             return ((c - p) / p) * 100
+        
+        pct_changes = [calc_pct(c, p) for c, p in zip(curr_vals, prev_vals)]
+
+        # Previous Period Bars (Orange)
+        fig.add_trace(go.Bar(
+            name=prev_label,
+            x=categories,
+            y=prev_vals,
+            text=[f"{v:,}".replace(",", ".") if v > 0 else "" for v in prev_vals],
+            textposition='outside',
+            marker_color='rgba(255, 159, 64, 0.8)', 
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        # Current Period Bars (Green/Teal)
+        fig.add_trace(go.Bar(
+            name=current_label,
+            x=categories,
+            y=curr_vals,
+            text=[f"{v:,}".replace(",", ".") if v > 0 else "" for v in curr_vals],
+            textposition='outside',
+            marker_color='rgba(75, 192, 192, 0.8)', 
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        # Annotations
+        for i, (cat, pct) in enumerate(zip(categories, pct_changes)):
+            if prev_vals[i] == 0 and curr_vals[i] == 0: continue
+            
+            color = '#2ecc71' if pct >= 0 else '#e74c3c'
+            arrow = '↑' if pct >= 0 else '↓'
+            if prev_vals[i] == 0:
+                 txt = f"{arrow}100%"
+            else:
+                 txt = f"{arrow}{abs(pct):.1f}%"
+            
+            fig.add_annotation(
+                x=cat,
+                y=max(prev_vals[i], curr_vals[i]) * 1.1,
+                text=txt,
+                showarrow=False,
+                font={'size': 10, 'color': color, 'weight': 'bold'}
+            )
+            
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis_title='Tingkat Risiko',
+            yaxis_title='Jumlah Perizinan',
+            width=self.width,
+            height=self.height,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        return fig
 
     def create_monthly_pm_grouped_chart(
         self,

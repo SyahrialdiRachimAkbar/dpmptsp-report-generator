@@ -910,3 +910,49 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
 
         return f"{peak_text}{dom_text}{yoy_text}{qoq_text}"
 
+    def generate_risk_comparison_narrative(
+        self,
+        report,
+        current_data: Dict[str, int],
+        prev_year_data: Dict[str, int],
+        prev_q_data: Dict[str, int],
+        prev_q_label: str
+    ) -> str:
+        """
+        Generate summary narrative for Section 3.3 (Risk Levels).
+        Summarizes: Dominant Risk Level, YoY for Dominant, QoQ for Dominant.
+        """
+        if not current_data:
+            return "Data tingkat risiko belum tersedia."
+
+        period_text = self._get_periode_text(report)
+        total = sum(current_data.values())
+        
+        # 1. Dominance
+        dom_risk = max(current_data, key=current_data.get)
+        dom_val = current_data[dom_risk]
+        dom_pct = (dom_val / total * 100) if total > 0 else 0
+        
+        dom_formatted = f"{dom_val:,}".replace(",", ".")
+        dom_text = f"Pada {period_text}, perizinan berusaha didominasi oleh tingkat risiko {dom_risk} dengan {dom_formatted} perizinan ({dom_pct:.1f}%)."
+
+        # 2. Comparison for Dominant Risk
+        yoy_text = ""
+        qoq_text = ""
+        
+        # YoY
+        prev_y_val = prev_year_data.get(dom_risk, 0)
+        if prev_y_val > 0:
+            chg = ((dom_val - prev_y_val) / prev_y_val) * 100
+            trend = "naik" if chg >= 0 else "turun"
+            yoy_text = f" Secara tahunan (Y-o-Y), kategori ini {trend} {abs(chg):.1f}% dibandingkan tahun sebelumnya."
+        
+        # QoQ
+        prev_q_val = prev_q_data.get(dom_risk, 0)
+        if prev_q_val > 0 and prev_q_label:
+            chg = ((dom_val - prev_q_val) / prev_q_val) * 100
+            trend = "meningkat" if chg >= 0 else "menurun"
+            qoq_text = f" Dibandingkan dengan {prev_q_label} (Q-o-Q), tercatat {trend} sebesar {abs(chg):.1f}%."
+
+        return f"{dom_text}{yoy_text}{qoq_text}"
+
