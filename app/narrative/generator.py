@@ -747,3 +747,166 @@ Data ini mencerminkan dinamika investasi di wilayah Lampung dan menjadi indikato
         
         return f"Perbandingan Y-o-Y menunjukkan {trend} {abs(change):.1f}% untuk {tw_name} ({prev_year}: {prev_formatted} vs {current_year}: {curr_formatted}). {insight.capitalize()}."
 
+    def generate_pb_oss_narrative(
+        self,
+        report,  # PeriodReport
+        total_permits: int,
+        monthly_permits: Dict[str, int],
+        location_data: Dict[str, int],
+        prev_year_total: int,
+        prev_q_total: int,
+        prev_q_label: str
+    ) -> str:
+        """
+        Generate summary narrative for Section 3.1 (PB OSS).
+        Summarizes: Monthly Trend, Top Location, Y-o-Y, Q-o-Q.
+        """
+        if total_permits <= 0:
+            return "Data perizinan belum tersedia."
+
+        period_text = self._get_periode_text(report)
+        total_formatted = f"{total_permits:,}".replace(",", ".")
+
+        # 1. Monthly Peak
+        peak_month = ""
+        peak_val = 0
+        if monthly_permits:
+            peak_month = max(monthly_permits, key=monthly_permits.get)
+            peak_val = monthly_permits[peak_month]
+        
+        peak_text = ""
+        if peak_month:
+            peak_val_fmt = f"{peak_val:,}".replace(",", ".")
+            peak_text = f" Aktivitas tertinggi tercatat pada bulan {peak_month} dengan {peak_val_fmt} perizinan."
+
+        # 2. Top Location (All locations considered)
+        loc_text = ""
+        if location_data:
+            top_loc = max(location_data, key=location_data.get)
+            top_loc_val = location_data[top_loc]
+            top_loc_pct = (top_loc_val / total_permits * 100)
+            top_loc_fmt = f"{top_loc_val:,}".replace(",", ".")
+            loc_text = f" Lokasi usaha didominasi oleh {top_loc} dengan {top_loc_fmt} perizinan ({top_loc_pct:.1f}%)."
+
+        # 3. Y-o-Y Comparison
+        yoy_text = ""
+        if prev_year_total > 0:
+            change = ((total_permits - prev_year_total) / prev_year_total) * 100
+            trend = "meningkat" if change >= 0 else "menurun"
+            yoy_text = f" Secara tahunan (Y-o-Y), terjadi {trend} sebesar {abs(change):.1f}% dibandingkan tahun sebelumnya."
+
+        # 4. Q-o-Q Comparison
+        qoq_text = ""
+        if prev_q_total > 0:
+            change = ((total_permits - prev_q_total) / prev_q_total) * 100
+            trend = "peningkatan" if change >= 0 else "penurunan"
+            qoq_text = f" Dibandingkan dengan {prev_q_label}, terjadi {trend} sebesar {abs(change):.1f}%."
+
+        # Combine
+        text = f"""Sepanjang {period_text}, tercatat {total_formatted} perizinan berusaha lintas sektor di Provinsi Lampung (Kewenangan Gubernur).{peak_text}{loc_text}{yoy_text}{qoq_text}"""
+        
+        return text
+
+    def generate_status_pm_comparison_narrative(
+        self,
+        report,  # PeriodReport
+        curr_pma: int,
+        curr_pmdn: int,
+        prev_year_pma: int,
+        prev_year_pmdn: int,
+        prev_q_pma: int,
+        prev_q_pmdn: int,
+        prev_q_label: str,
+        monthly_breakdown: Optional[Dict[str, Dict[str, int]]] = None
+    ) -> str:
+        """
+        Generate summary narrative for Section 3.2 (Status PM).
+        Summarizes: Monthly Peak, Dominance, YoY Growth, QoQ Growth.
+        """
+        total = curr_pma + curr_pmdn
+        if total <= 0:
+            return "Data penanaman modal belum tersedia."
+
+        period_text = self._get_periode_text(report)
+
+        # 1. Monthly Peak Analysis
+        peak_text = ""
+        if monthly_breakdown:
+            # Find month with max Total (PMA + PMDN)
+            month_totals = {
+                m: (d.get('PMA', 0) + d.get('PMDN', 0)) 
+                for m, d in monthly_breakdown.items()
+            }
+            if month_totals:
+                peak_month = max(month_totals, key=month_totals.get)
+                peak_val = month_totals[peak_month]
+                peak_pma = monthly_breakdown[peak_month].get('PMA', 0)
+                peak_pmdn = monthly_breakdown[peak_month].get('PMDN', 0)
+                
+                if peak_val > 0:
+                    peak_text = (f"Aktivitas perizinan tertinggi tercatat pada bulan {peak_month} "
+                                 f"dengan total {peak_val} perizinan ({peak_pma} PMA, {peak_pmdn} PMDN). ")
+        
+        # 2. Dominance
+        if curr_pmdn > curr_pma:
+            dom = "PMDN"
+            val = curr_pmdn
+            pct = (curr_pmdn / total * 100)
+        else:
+            dom = "PMA"
+            val = curr_pma
+            pct = (curr_pma / total * 100)
+        
+        val_fmt = f"{val:,}".replace(",", ".")
+        dom_text = f"Secara keseluruhan pada {period_text}, didominasi oleh {dom} dengan {val_fmt} perizinan ({pct:.1f}%)."
+
+        # 3. Y-o-Y Analysis
+        yoy_text = ""
+        if prev_year_pma > 0 or prev_year_pmdn > 0:
+            # Change for PMA
+            pma_chg = 0
+            if prev_year_pma > 0:
+                pma_chg = ((curr_pma - prev_year_pma) / prev_year_pma) * 100
+                pma_trend = "meningkat" if pma_chg >= 0 else "menurun"
+                pma_str = f"PMA {pma_trend} {abs(pma_chg):.1f}%"
+            else:
+                pma_str = "PMA baru tercatat" if curr_pma > 0 else "PMA tetap nihil"
+
+            # Change for PMDN
+            pmdn_chg = 0
+            if prev_year_pmdn > 0:
+                pmdn_chg = ((curr_pmdn - prev_year_pmdn) / prev_year_pmdn) * 100
+                pmdn_trend = "meningkat" if pmdn_chg >= 0 else "menurun"
+                pmdn_str = f"PMDN {pmdn_trend} {abs(pmdn_chg):.1f}%"
+            else:
+                pmdn_str = "PMDN baru tercatat" if curr_pmdn > 0 else "PMDN tetap nihil"
+            
+            yoy_text = f" Secara tahunan (Y-o-Y), {pma_str} dan {pmdn_str} dibandingkan periode yang sama tahun sebelumnya."
+
+        # 4. Q-o-Q Analysis
+        qoq_text = ""
+        if (prev_q_pma > 0 or prev_q_pmdn > 0) and prev_q_label:
+            # Change for PMA
+            pma_chg = 0
+            if prev_q_pma > 0:
+                pma_chg = ((curr_pma - prev_q_pma) / prev_q_pma) * 100
+                pma_trend = "naik" if pma_chg >= 0 else "turun"
+                pma_str = f"PMA {pma_trend} {abs(pma_chg):.1f}%"
+            else:
+                pma_str = ""
+
+            # Change for PMDN
+            pmdn_chg = 0
+            if prev_q_pmdn > 0:
+                pmdn_chg = ((curr_pmdn - prev_q_pmdn) / prev_q_pmdn) * 100
+                pmdn_trend = "naik" if pmdn_chg >= 0 else "turun"
+                pmdn_str = f"PMDN {pmdn_trend} {abs(pmdn_chg):.1f}%"
+            else:
+                pmdn_str = ""
+            
+            detail_list = [s for s in [pma_str, pmdn_str] if s]
+            if detail_list:
+                qoq_text = f" Dibandingkan dengan {prev_q_label}, {' dan '.join(detail_list)}."
+
+        return f"{peak_text}{dom_text}{yoy_text}{qoq_text}"
+

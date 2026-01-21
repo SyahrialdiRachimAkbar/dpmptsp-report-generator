@@ -545,6 +545,62 @@ class ChartGenerator:
         
         return fig
 
+    def create_monthly_pm_grouped_chart(
+        self,
+        monthly_data: Dict[str, Dict[str, int]],
+        title: str = "Tren Perizinan Bulanan (PMA vs PMDN)"
+    ) -> go.Figure:
+        """
+        Create grouped bar chart for Monthly PMA/PMDN breakdown.
+        
+        Args:
+            monthly_data: Dict mapping Month -> {'PMA': x, 'PMDN': y}
+            title: Chart title
+            
+        Returns:
+            Plotly Figure
+        """
+        months = list(monthly_data.keys())
+        pma_vals = [monthly_data[m].get('PMA', 0) for m in months]
+        pmdn_vals = [monthly_data[m].get('PMDN', 0) for m in months]
+        
+        fig = go.Figure()
+        
+        # PMA Bars (Green)
+        fig.add_trace(go.Bar(
+            name='PMA',
+            x=months,
+            y=pma_vals,
+            text=[f"{v:,}".replace(",", ".") if v > 0 else "" for v in pma_vals],
+            textposition='outside',
+            marker_color=self.COLORS['pma'], # Green
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        # PMDN Bars (Blue)
+        fig.add_trace(go.Bar(
+            name='PMDN',
+            x=months,
+            y=pmdn_vals,
+            text=[f"{v:,}".replace(",", ".") if v > 0 else "" for v in pmdn_vals],
+            textposition='outside',
+            marker_color=self.COLORS['pmdn'], # Blue
+            textfont={'size': 11, 'color': self.COLORS['text']}
+        ))
+        
+        fig.update_layout(
+            title={'text': title, 'x': 0.5, 'xanchor': 'center'},
+            barmode='group',
+            xaxis_title='Bulan',
+            yaxis_title='Jumlah Perizinan',
+            width=self.width,
+            height=self.height,
+            showlegend=True,
+            legend={'x': 0.5, 'y': -0.15, 'xanchor': 'center', 'orientation': 'h'},
+            **self.layout_defaults
+        )
+        return fig
+
     def create_pelaku_grouped_comparison(
         self,
         current_umk: int,

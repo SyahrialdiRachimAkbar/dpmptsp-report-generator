@@ -143,6 +143,22 @@ class PBOSSReferenceData:
         """Get total permits for specified months."""
         return sum(self.monthly_permits.get(m, 0) for m in months)
 
+    def get_monthly_status_pm_breakdown(self, months: List[str]) -> Dict[str, Dict[str, int]]:
+        """
+        Get breakdown of Status PM (PMA/PMDN) for each month.
+        Returns: { 'Januari': {'PMA': 10, 'PMDN': 20}, ... }
+        """
+        result = {}
+        for month in months:
+            if month in self.monthly_status_pm:
+                result[month] = {
+                    'PMA': self.monthly_status_pm[month].get('PMA', 0),
+                    'PMDN': self.monthly_status_pm[month].get('PMDN', 0)
+                }
+            else:
+                result[month] = {'PMA': 0, 'PMDN': 0}
+        return result
+
     def get_period_permits_by_month(self, months: List[str]) -> Dict[str, int]:
         """Get permit counts by month for specified months."""
         result = {}

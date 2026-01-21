@@ -1241,6 +1241,7 @@ def render_report(report, stats: dict):
     """Render the full report with charts and narratives."""
     chart_gen = ChartGenerator()
     narrative_gen = NarrativeGenerator()
+    import plotly.graph_objects as go  # Fix UnboundLocalError
     
     # Generate narratives
     narratives = narrative_gen.generate_full_narrative(report, stats)
@@ -2555,8 +2556,13 @@ def render_report(report, stats: dict):
                 kab_data = pb_data.get_period_by_kab_kota(months)
                 if kab_data:
                     import plotly.graph_objects as go
-                    # Top 10 Kab/Kota
-                    sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:10])
+                    # Show ALL Locations (Sorted)
+                    sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True))
+                    
+                    # Dynamic Height
+                    num_items = len(sorted_kab)
+                    chart_height = max(400, num_items * 30 + 50)
+
                     fig_kab = go.Figure(data=[go.Bar(
                         x=list(sorted_kab.values()), 
                         y=list(sorted_kab.keys()), 
@@ -2564,9 +2570,9 @@ def render_report(report, stats: dict):
                         marker_color='#3B82F6'
                     )])
                     fig_kab.update_layout(
-                        title='Top 10 Lokasi Usaha (Kab/Kota)', 
+                        title='Lokasi Usaha (Kab/Kota)', 
                         template='plotly_dark', 
-                        height=400, 
+                        height=chart_height, 
                         yaxis={'categoryorder': 'total ascending'},
                         margin=dict(l=10, r=10, t=40, b=10)
                     )
@@ -2604,15 +2610,105 @@ def render_report(report, stats: dict):
                 else:
                     st.info("Data Q-o-Q tidak tersedia")
             
+            # Narrative for Section 3.1
+            narrative_3_1 = narrative_gen.generate_pb_oss_narrative(
+                report=report,
+                total_permits=curr_permits,
+                monthly_permits=monthly_permits,
+                location_data=kab_data if kab_data else {},
+                prev_year_total=prev_year_permits,
+                prev_q_total=prev_q_permits,
+                prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya"
+            )
+            st.markdown(f'<div class="narrative-box">{narrative_3_1}</div>', unsafe_allow_html=True)
+            
+            # 3.2 Status PM
             # 3.2 Status PM
             st.markdown('<div class="section-title">3.2 Rekapitulasi Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
+            
+            # 1. Calc Current
             pm_data = pb_data.get_period_status_pm(months)
-            if pm_data:
-                import plotly.graph_objects as go
-                fig = go.Figure(data=[go.Bar(x=list(pm_data.keys()), y=list(pm_data.values()), marker_color=['#10B981', '#F59E0B'][:len(pm_data)])])
-                fig.update_layout(title='Perizinan per Status PM', template='plotly_dark', height=350)
-                st.plotly_chart(fig, use_container_width=True)
+            curr_pma = pm_data.get('PMA', 0)
+            curr_pmdn = pm_data.get('PMDN', 0)
+            
+            # 1b. Calc Monthly Breakdown (New)
+            pm_monthly_breakdown = pb_data.get_monthly_status_pm_breakdown(months)
+            
+            # 2. Calc YoY
+            prev_year_pma = 0
+            prev_year_pmdn = 0
+            if prev_pb_data:
+                 prev_pm_dist = prev_pb_data.get_period_status_pm(months)
+                 prev_year_pma = prev_pm_dist.get('PMA', 0)
+                 prev_year_pmdn = prev_pm_dist.get('PMDN', 0)
+            
+            # 3. Calc QoQ
+            prev_q_pma = 0
+            prev_q_pmdn = 0
+            if prev_q_pb_data and prev_q_name_pb in TRIWULAN_KE_BULAN:
+                 prev_q_months_pb = TRIWULAN_KE_BULAN[prev_q_name_pb]
+                 prev_q_pm_dist = prev_q_pb_data.get_period_status_pm(prev_q_months_pb)
+                 prev_q_pma = prev_q_pm_dist.get('PMA', 0)
+                 prev_q_pmdn = prev_q_pm_dist.get('PMDN', 0)
+            
+            # 4. Render Charts
+            # ROW 1: Monthly Trend (Full Width)
+            if pm_monthly_breakdown:
+                fig_monthly_pm = chart_gen.create_monthly_pm_grouped_chart(
+                    monthly_data=pm_monthly_breakdown,
+                    title="Tren Bulanan (Status PM)"
+                )
+                st.plotly_chart(fig_monthly_pm, use_container_width=True)
+            
+            # ROW 2: Comparisons (Side-by-Side)
+            col32_1, col32_2 = st.columns(2)
+            
+            with col32_1:
+                # YoY Chart
+                if prev_pb_data:
+                     fig_yoy_pm = chart_gen.create_pm_grouped_comparison(
+                         current_pma=curr_pma,
+                         current_pmdn=curr_pmdn,
+                         prev_pma=prev_year_pma,
+                         prev_pmdn=prev_year_pmdn,
+                         current_label=f"{report.year}",
+                         prev_label=f"{report.year - 1}",
+                         title="Perbandingan Y-o-Y (Perizinan)"
+                     )
+                     st.plotly_chart(fig_yoy_pm, use_container_width=True)
+                else:
+                     st.info("Upload file PB OSS tahun lalu untuk Y-o-Y (Status PM)")
+
+            with col32_2:
+                # QoQ Chart
+                if prev_q_pb_data:
+                     fig_qoq_pm = chart_gen.create_pm_grouped_comparison(
+                         current_pma=curr_pma,
+                         current_pmdn=curr_pmdn,
+                         prev_pma=prev_q_pma,
+                         prev_pmdn=prev_q_pmdn,
+                         current_label=f"{report.period_name}",
+                         prev_label=f"{prev_q_name_pb}",
+                         title="Perbandingan Q-o-Q (Perizinan)"
+                     )
+                     st.plotly_chart(fig_qoq_pm, use_container_width=True)
+                else:
+                     st.info("Data Q-o-Q tidak tersedia")
+            
+            # 5. Native Narrative
+            narrative_3_2 = narrative_gen.generate_status_pm_comparison_narrative(
+                report=report,
+                curr_pma=curr_pma,
+                curr_pmdn=curr_pmdn,
+                prev_year_pma=prev_year_pma,
+                prev_year_pmdn=prev_year_pmdn,
+                prev_q_pma=prev_q_pma,
+                prev_q_pmdn=prev_q_pmdn,
+                prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya",
+                monthly_breakdown=pm_monthly_breakdown
+            )
+            st.markdown(f'<div class="narrative-box">{narrative_3_2}</div>', unsafe_allow_html=True)
             
             # 3.3 Risk Level
             st.markdown('<div class="section-title">3.3 Rekapitulasi Berdasarkan Tingkat Risiko</div>', 
@@ -2638,20 +2734,7 @@ def render_report(report, stats: dict):
                 chart_height = max(400, num_sectors * 30 + 100)
                 
                 fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
-                fig.update_layout(
-                    title='Perizinan per Sektor', 
-                    template='plotly_dark', 
-                    height=chart_height,
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    yaxis={
-                        'categoryorder': 'total ascending',
-                        'automargin': True,
-                        'tickmode': 'linear'
-                    },
-                    xaxis={
-                        'automargin': True
-                    }
-                )
+                fig.update_layout(title='Perizinan per Sektor', template='plotly_dark', height=chart_height, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Data sektor kementerian/lembaga tidak tersedia atau kosong.")
