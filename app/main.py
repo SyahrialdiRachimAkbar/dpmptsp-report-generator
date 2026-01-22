@@ -1978,7 +1978,7 @@ def render_report(report, stats: dict):
                             
                             fig_kab.update_layout(
                                 title='Jumlah Proyek Berdasarkan Kabupaten/Kota',
-                                template='plotly_dark',
+                                template='plotly_white',
                                 height=750, # Taller chart to match reference
                                 yaxis={'categoryorder': 'total ascending'}, # High at top
                                 margin=dict(l=0, r=0, t=40, b=0),
@@ -2210,7 +2210,7 @@ def render_report(report, stats: dict):
                 fig_skala.update_layout(
                     title=f"Jumlah Proyek {report.period_name} {report.year} Berdasarkan Skala Usaha",
                     yaxis_title='Jumlah Proyek',
-                    template='plotly_dark',
+                    template='plotly_white',
                     height=400,
                     **chart_gen.layout_defaults
                 )
@@ -2296,7 +2296,7 @@ def render_report(report, stats: dict):
                     )])
                     fig_inv.update_layout(
                         title='Jumlah Investasi per Kabupaten/Kota (Rupiah)',
-                        template='plotly_dark',
+                        template='plotly_white',
                         height=400,
                         yaxis={'categoryorder': 'total ascending'}
                     )
@@ -2390,7 +2390,7 @@ def render_report(report, stats: dict):
                     )])
                     fig_labor.update_layout(
                         title='Jumlah Tenaga Kerja per Kabupaten/Kota',
-                        template='plotly_dark',
+                        template='plotly_white',
                         height=400,
                         yaxis={'categoryorder': 'total ascending'},
                         xaxis_title='Jumlah Tenaga Kerja'
@@ -2564,7 +2564,7 @@ def render_report(report, stats: dict):
                     )])
                     fig_kab.update_layout(
                         title='Lokasi Usaha (Kab/Kota)', 
-                        template='plotly_dark', 
+                        template='plotly_white', 
                         height=chart_height, 
                         yaxis={'categoryorder': 'total ascending'},
                         margin=dict(l=10, r=10, t=40, b=10)
@@ -2881,7 +2881,7 @@ def render_report(report, stats: dict):
                 )])
                 fig_risk.update_layout(
                     title='Perizinan per Tingkat Risiko (Urut)', 
-                    template='plotly_dark', 
+                    template='plotly_white', 
                     height=400
                 )
                 st.plotly_chart(fig_risk, use_container_width=True)
@@ -3040,7 +3040,7 @@ def render_report(report, stats: dict):
                 import plotly.graph_objects as go
                 sorted_jenis = dict(sorted(jenis_data.items(), key=lambda x: x[1], reverse=True)[:10])
                 fig = go.Figure(data=[go.Bar(x=list(sorted_jenis.values()), y=list(sorted_jenis.keys()), orientation='h', marker_color='#06B6D4')])
-                fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
+                fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_white', height=400, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
 
                 # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 3.5) ==========
@@ -3125,7 +3125,7 @@ def render_report(report, stats: dict):
                     )])
                     fig.update_layout(
                         title=f'Jumlah Perizinan Berdasarkan Status Respon<br>Periode {report.period_name} Tahun {report.year}',
-                        template='plotly_dark', 
+                        template='plotly_white', 
                         height=400,
                         showlegend=False
                     )
@@ -3278,7 +3278,7 @@ def render_report(report, stats: dict):
                         text=f'<b>JUMLAH PERIZINAN BERUSAHA BERBASIS RISIKO</b><br>PERIODE {report.period_name.upper()} TAHUN {report.year} BERDASARKAN KEWENANGAN',
                         font=dict(size=14)
                     ),
-                    template='plotly_dark', 
+                    template='plotly_white', 
                     height=chart_height,
                     yaxis=dict(categoryorder='total ascending', tickfont=dict(size=10)),
                     xaxis=dict(title='Jumlah Perizinan', tickformat=','),
@@ -3558,7 +3558,7 @@ def generate_word(report, stats) -> bytes:
             ordered_vals = [skala_data.get(k, 0) for k in std_keys]
             import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=std_keys, y=ordered_vals, marker_color=['#3498db', '#e67e22', '#2ecc71', '#9b59b6'])])
-            fig.update_layout(title="Proyek Berdasarkan Skala Usaha", template='plotly_dark', height=400)
+            fig.update_layout(title="Proyek Berdasarkan Skala Usaha", template='plotly_white', height=400)
             charts['skala_usaha'] = fig.to_image(format='png', scale=2)
     
     # ============== SECTION 3: PERIZINAN BERUSAHA (PB OSS) ==============
@@ -3574,7 +3574,7 @@ def generate_word(report, stats) -> bytes:
             sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
             import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
-            fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_dark', height=450, yaxis={'categoryorder': 'total ascending'})
+            fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_white', height=450, yaxis={'categoryorder': 'total ascending'})
             charts['pb_kab_kota'] = fig.to_image(format='png', scale=2)
         
         # 3.2 Status PM PB chart
@@ -3593,7 +3593,7 @@ def generate_word(report, stats) -> bytes:
             sorted_risk = {k: risk_pb_data.get(k, 0) for k in risk_order if k in risk_pb_data}
             import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=list(sorted_risk.values()), y=list(sorted_risk.keys()), orientation='h', marker_color=['#10B981', '#FBBF24', '#F59E0B', '#EF4444'])])
-            fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_dark', height=400)
+            fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_white', height=400)
             charts['pb_risk'] = fig.to_image(format='png', scale=2)
         
         # 3.4 Sector PB chart
@@ -3602,7 +3602,7 @@ def generate_word(report, stats) -> bytes:
             sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
             import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
-            fig.update_layout(title='Top 10 Sektor Perizinan', template='plotly_dark', height=450, yaxis={'categoryorder': 'total ascending'})
+            fig.update_layout(title='Top 10 Sektor Perizinan', template='plotly_white', height=450, yaxis={'categoryorder': 'total ascending'})
             charts['pb_sector'] = fig.to_image(format='png', scale=2)
 
     # Create Word exporter
