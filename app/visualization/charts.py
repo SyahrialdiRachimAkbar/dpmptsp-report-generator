@@ -51,7 +51,7 @@ class ChartGenerator:
         'non_umk': '#1e3a5f',     # Primary blue for NON-UMK
         
         # General UI colors
-        'text': '#333333',        # Dark grey for text labels
+        'text': '#000000',        # Solid black for text labels
         
         # Risk level colors (gradient from green to red)
         'risk_rendah': '#27ae60',          # Green - Low risk
@@ -91,7 +91,7 @@ class ChartGenerator:
         self.width = width
         self.height = height
         self.layout_defaults = {
-            'font': {'family': 'Arial, sans-serif', 'size': 12, 'color': '#2c3e50'},
+            'font': {'family': 'Arial, sans-serif', 'size': 12, 'color': '#000000'},
             'paper_bgcolor': 'rgba(0,0,0,0)',
             'plot_bgcolor': 'rgba(0,0,0,0)',
             'margin': {'l': 50, 'r': 50, 't': 60, 'b': 50},
@@ -177,8 +177,8 @@ class ChartGenerator:
         
         # Set y-axis to start from 0
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.2], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#2c3e50'}, tickfont={'color': '#2c3e50'})
-        fig.update_xaxes(tickfont={'color': '#2c3e50'})
+        fig.update_yaxes(range=[0, max_val * 1.2], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#000000'}, tickfont={'color': '#000000'})
+        fig.update_xaxes(tickfont={'color': '#000000'})
         
         return fig
     
@@ -317,8 +317,8 @@ class ChartGenerator:
             **self.layout_defaults
         )
         
-        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#2c3e50'}, tickfont={'color': '#2c3e50'})
-        fig.update_yaxes(tickfont={'size': 10, 'color': '#2c3e50'})
+        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#000000'}, tickfont={'color': '#000000'})
+        fig.update_yaxes(tickfont={'size': 10, 'color': '#000000'})
         
         return fig
     
@@ -1142,8 +1142,8 @@ class ChartGenerator:
         )
         
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.3], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#2c3e50'}, tickfont={'color': '#2c3e50'})
-        fig.update_xaxes(tickfont={'color': '#2c3e50'})
+        fig.update_yaxes(range=[0, max_val * 1.3], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#000000'}, tickfont={'color': '#000000'})
+        fig.update_xaxes(tickfont={'color': '#000000'})
         
         return fig
 
@@ -1350,8 +1350,8 @@ class ChartGenerator:
         )
         
         max_val = max(values) if values else 0
-        fig.update_yaxes(range=[0, max_val * 1.25], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#2c3e50'}, tickfont={'color': '#2c3e50'})
-        fig.update_xaxes(tickfont={'color': '#2c3e50'})
+        fig.update_yaxes(range=[0, max_val * 1.25], gridcolor='rgba(150,150,150,0.3)', title_font={'color': '#000000'}, tickfont={'color': '#000000'})
+        fig.update_xaxes(tickfont={'color': '#000000'})
         
         return fig
     
@@ -1394,18 +1394,18 @@ class ChartGenerator:
         ))
         
         fig.update_layout(
-            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#2c3e50'}},
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#000000'}},
             xaxis_title='Jumlah Perizinan',
             width=self.width,
             height=max(350, len(labels) * 45),
             margin={'l': 100, 'r': 50, 't': 60, 'b': 50},
-            font={'family': 'Arial, sans-serif', 'size': 12, 'color': '#2c3e50'},
+            font={'family': 'Arial, sans-serif', 'size': 12, 'color': '#000000'},
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
         )
         
-        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', showgrid=True, title_font={'color': '#2c3e50'}, tickfont={'color': '#2c3e50'})
-        fig.update_yaxes(tickfont={'size': 11, 'color': '#2c3e50'})
+        fig.update_xaxes(gridcolor='rgba(150,150,150,0.3)', showgrid=True, title_font={'color': '#000000'}, tickfont={'color': '#000000'})
+        fig.update_yaxes(tickfont={'size': 11, 'color': '#000000'})
         
         return fig
     
@@ -1511,11 +1511,11 @@ class ChartGenerator:
             marker_color=colors,
             text=[f'Rp {v:,.1f}M' for v in values],
             textposition='outside',
-            textfont={'size': 10, 'color': '#2c3e50'},
+            textfont={'size': 10, 'color': '#000000'},
         ))
         
         fig.update_layout(
-            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#2c3e50'}},
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#000000'}},
             xaxis_title='Nilai Investasi (Miliar Rupiah)',
             width=self.width,
             height=max(350, len(names) * 40),
@@ -1524,10 +1524,10 @@ class ChartGenerator:
         
         fig.update_xaxes(
             gridcolor='rgba(150,150,150,0.3)',
-            title_font={'color': '#2c3e50'},
-            tickfont={'color': '#2c3e50'}
+            title_font={'color': '#000000'},
+            tickfont={'color': '#000000'}
         )
-        fig.update_yaxes(tickfont={'color': '#2c3e50'})
+        fig.update_yaxes(tickfont={'color': '#000000'})
         
         return fig
 
@@ -1561,7 +1561,7 @@ class ChartGenerator:
             marker_colors=[self.COLORS['pma'], self.COLORS['pmdn']],
             textinfo='label+percent',
             textposition='outside',
-            textfont={'size': 12, 'color': '#2c3e50'},
+            textfont={'size': 12, 'color': '#000000'},
             hovertemplate='%{label}: Rp %{value:,.0f}<extra></extra>'
         ))
         
@@ -1570,11 +1570,11 @@ class ChartGenerator:
             x=0.5, y=0.5,
             text=f"<b>Total</b><br>Rp {total/1e12:.2f}T",
             showarrow=False,
-            font={'size': 14, 'color': '#2c3e50'}
+            font={'size': 14, 'color': '#000000'}
         )
         
         fig.update_layout(
-            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#2c3e50'}},
+            title={'text': title, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 14, 'color': '#000000'}},
             width=self.width,
             height=self.height,
             showlegend=True,

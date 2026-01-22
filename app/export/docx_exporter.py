@@ -128,6 +128,11 @@ class WordExporter:
         if 'pm' in charts:
             self._add_chart_image(doc, charts['pm'], width=4)
         
+        if 'pm_yoy' in charts:
+             self._add_chart_image(doc, charts['pm_yoy'], width=4)
+        if 'pm_qoq' in charts:
+             self._add_chart_image(doc, charts['pm_qoq'], width=4)
+        
         self._add_paragraph(doc, narratives.status_pm)
         
         # Section 5: Pelaku Usaha
@@ -135,6 +140,11 @@ class WordExporter:
         
         if 'pelaku' in charts:
             self._add_chart_image(doc, charts['pelaku'], width=4)
+            
+        if 'pelaku_yoy' in charts:
+            self._add_chart_image(doc, charts['pelaku_yoy'], width=4)
+        if 'pelaku_qoq' in charts:
+            self._add_chart_image(doc, charts['pelaku_qoq'], width=4)
         
         self._add_paragraph(doc, narratives.pelaku_usaha)
         
@@ -161,11 +171,39 @@ class WordExporter:
         if 'proyek_pm' in charts:
             self._add_subsection_title(doc, "2.1 Distribusi Proyek PMA/PMDN")
             self._add_chart_image(doc, charts['proyek_pm'], width=4)
+            
+            if 'proyek_pm_yoy' in charts:
+                 self._add_chart_image(doc, charts['proyek_pm_yoy'], width=4)
+            
+            if 'proyek_pm_qoq' in charts:
+                 self._add_chart_image(doc, charts['proyek_pm_qoq'], width=4)
         
         # 2.3 Skala Usaha
-        if 'skala_usaha' in charts:
             self._add_subsection_title(doc, "2.3 Proyek Berdasarkan Skala Usaha")
             self._add_chart_image(doc, charts['skala_usaha'], width=5)
+            
+            if 'skala_usaha_yoy' in charts:
+                self._add_chart_image(doc, charts['skala_usaha_yoy'], width=5)
+            
+            if 'skala_usaha_qoq' in charts:
+                self._add_chart_image(doc, charts['skala_usaha_qoq'], width=5)
+        
+        # 2.4 Investasi per Wilayah
+        if 'inv_wilayah' in charts:
+            self._add_subsection_title(doc, "2.4 Investasi per Kabupaten/Kota")
+            self._add_chart_image(doc, charts['inv_wilayah'], width=5)
+            if hasattr(narratives, 'investasi_wilayah') and narratives.investasi_wilayah:
+                self._add_paragraph(doc, narratives.investasi_wilayah)
+
+            if 'inv_table' in charts:
+                self._add_chart_image(doc, charts['inv_table'], width=6)
+
+        # 2.5 Tenaga Kerja
+        if 'inv_labor' in charts:
+            self._add_subsection_title(doc, "2.5 Penyerapan Tenaga Kerja")
+            self._add_chart_image(doc, charts['inv_labor'], width=5)
+            if hasattr(narratives, 'investasi_tenaga_kerja') and narratives.investasi_tenaga_kerja:
+                self._add_paragraph(doc, narratives.investasi_tenaga_kerja)
         
         # ============== SECTION 3: PERIZINAN BERUSAHA ==============
         doc.add_page_break()
@@ -180,6 +218,12 @@ class WordExporter:
         if 'pb_pm' in charts:
             self._add_subsection_title(doc, "3.2 Perizinan Berdasarkan Status PM")
             self._add_chart_image(doc, charts['pb_pm'], width=4)
+            
+            if 'pb_pm_yoy' in charts:
+                self._add_chart_image(doc, charts['pb_pm_yoy'], width=4)
+            
+            if 'pb_pm_qoq' in charts:
+                self._add_chart_image(doc, charts['pb_pm_qoq'], width=4)
         
         # 3.3 Risk Level PB
         if 'pb_risk' in charts:
@@ -187,9 +231,31 @@ class WordExporter:
             self._add_chart_image(doc, charts['pb_risk'], width=5)
         
         # 3.4 Sector PB
-        if 'pb_sector' in charts:
             self._add_subsection_title(doc, "3.4 Top 10 Sektor Perizinan")
             self._add_chart_image(doc, charts['pb_sector'], width=5)
+            if hasattr(narratives, 'pb_sektor') and narratives.pb_sektor:
+                self._add_paragraph(doc, narratives.pb_sektor)
+
+        # 3.5 Jenis Perizinan
+        if 'pb_jenis' in charts:
+             self._add_subsection_title(doc, "3.5 Rekapitulasi Jenis Perizinan")
+             self._add_chart_image(doc, charts['pb_jenis'], width=5)
+             if hasattr(narratives, 'pb_jenis') and narratives.pb_jenis:
+                self._add_paragraph(doc, narratives.pb_jenis)
+
+        # 3.6 Status Respon
+        if 'pb_status_respon' in charts:
+             self._add_subsection_title(doc, "3.6 Rekapitulasi Status Respon")
+             self._add_chart_image(doc, charts['pb_status_respon'], width=5)
+             if hasattr(narratives, 'pb_status_respon') and narratives.pb_status_respon:
+                self._add_paragraph(doc, narratives.pb_status_respon)
+
+        # 3.7 Kewenangan
+        if 'pb_kewenangan' in charts:
+             self._add_subsection_title(doc, "3.7 Rekapitulasi Kewenangan")
+             self._add_chart_image(doc, charts['pb_kewenangan'], width=5)
+             if hasattr(narratives, 'pb_kewenangan') and narratives.pb_kewenangan:
+                self._add_paragraph(doc, narratives.pb_kewenangan)
         
         # Section 7: Kesimpulan
         doc.add_page_break()

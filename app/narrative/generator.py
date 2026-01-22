@@ -22,6 +22,17 @@ class Narrative:
     status_pm: str
     pelaku_usaha: str
     kesimpulan: str
+    
+    # New fields for comprehensive export
+    investasi_wilayah: str = ""
+    investasi_tenaga_kerja: str = ""
+    investasi_sektor: str = ""
+    pb_jenis: str = ""
+    pb_status_respon: str = ""
+    pb_kewenangan: str = ""
+    pb_sektor: str = ""
+    pb_risiko: str = ""
+    pb_kab_kota_narrative: str = ""  # Explicit field if needed beyond rekapitulasi_kab_kota
 
 
 class NarrativeGenerator:
