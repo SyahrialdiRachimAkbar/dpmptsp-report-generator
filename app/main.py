@@ -1325,102 +1325,148 @@ def render_report(report, stats: dict):
              prev_full_data = ref_loader.load_nib(prev_nib_file.getvalue(), prev_nib_file.name)
          except Exception: pass
 
-    # 2. Determine Target Months
-    # Define Semester mappings (not in config, so define here)
-    SEMESTER_KE_BULAN = {
-        "Semester I": ["Januari", "Februari", "Maret", "April", "Mei", "Juni"],
-        "Semester II": ["Juli", "Agustus", "September", "Oktober", "November", "Desember"],
-    }
+    # 2. Comparison Context Setup (Centralized Logic)
+    # Define target months for Main Report and Comparison Charts
+    from app.config import TRIWULAN_KE_BULAN
     
-    target_months = []
-    if report.period_type == "Triwulan" and report.period_name in TRIWULAN_KE_BULAN:
-        target_months = TRIWULAN_KE_BULAN[report.period_name]
-    elif report.period_type == "Semester" and report.period_name in SEMESTER_KE_BULAN:
-        target_months = SEMESTER_KE_BULAN[report.period_name]
-    elif report.period_type == "Tahunan":
-        target_months = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
+    # Context dictionary to hold all comparison parameters
+    comp_ctx = {
+        # Main Report Scope
+        'main_target_months': [],
+        # YoY Chart Scope
+        'yoy_curr_months': [], 
+        'yoy_prev_months': [],
+        'yoy_curr_label': "",
+        'yoy_prev_label': "",
+        # QoQ Chart Scope
+        'qoq_curr_months': [],
+        'qoq_prev_months': [],
+        'qoq_curr_label': "",
+        'qoq_prev_label': "",
+        'has_prev_q_data': False # Flag to check if data available
+    }
 
-    # 3. Calculate Totals
-    # Current Period
+    # Helper for Semester Months
+    SEMESTER_KE_BULAN = {
+        "Semester I": TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"],
+        "Semester II": TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"],
+    }
+
+    if report.period_type == "Triwulan":
+        # Standard Logic
+        comp_ctx['main_target_months'] = TRIWULAN_KE_BULAN.get(report.period_name, [])
+        
+        # YoY: Same TW, Prev Year
+        comp_ctx['yoy_curr_months'] = comp_ctx['main_target_months']
+        comp_ctx['yoy_prev_months'] = comp_ctx['main_target_months']
+        comp_ctx['yoy_curr_label'] = f"{report.period_name} {report.year}"
+        comp_ctx['yoy_prev_label'] = f"{report.period_name} {report.year - 1}"
+        
+        # QoQ: Prev TW
+        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
+        try:
+            curr_idx = tw_list.index(report.period_name)
+            comp_ctx['qoq_curr_months'] = comp_ctx['main_target_months']
+            comp_ctx['qoq_curr_label'] = f"{report.period_name} {report.year}"
+            
+            if curr_idx > 0: # Same year
+                prev_q_name = tw_list[curr_idx - 1]
+                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
+                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year}"
+            else: # Prev year TW IV
+                prev_q_name = "TW IV"
+                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
+                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year - 1}"
+        except: pass
+
+    elif report.period_type == "Semester":
+        comp_ctx['main_target_months'] = SEMESTER_KE_BULAN.get(report.period_name, [])
+        
+        if report.period_name == "Semester I":
+            # YoY: Q2 vs Q2
+            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['yoy_curr_label'] = f"TW II {report.year}"
+            comp_ctx['yoy_prev_label'] = f"TW II {report.year - 1}"
+            
+            # QoQ: Q2 vs Q1
+            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW I"]
+            comp_ctx['qoq_curr_label'] = f"TW II {report.year}"
+            comp_ctx['qoq_prev_label'] = f"TW I {report.year}"
+            
+        elif report.period_name == "Semester II":
+            # YoY: Q4 vs Q4
+            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['yoy_curr_label'] = f"TW IV {report.year}"
+            comp_ctx['yoy_prev_label'] = f"TW IV {report.year - 1}"
+            
+            # QoQ: Q4 vs Q3
+            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW III"]
+            comp_ctx['qoq_curr_label'] = f"TW IV {report.year}"
+            comp_ctx['qoq_prev_label'] = f"TW III {report.year}"
+
+    elif report.period_type == "Tahunan":
+        # Main: Full Year
+        comp_ctx['main_target_months'] = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
+        
+        # YoY: Sem II vs Sem II
+        comp_ctx['yoy_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['yoy_prev_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['yoy_curr_label'] = f"Semester II {report.year}"
+        comp_ctx['yoy_prev_label'] = f"Semester II {report.year - 1}"
+        
+        # QoQ: Sem II vs Sem I (Label: "Sem I vs Sem II")
+        comp_ctx['qoq_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['qoq_prev_months'] = SEMESTER_KE_BULAN["Semester I"]
+        comp_ctx['qoq_curr_label'] = f"Semester II {report.year}"
+        comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
+
+    # Global "target_months" for legacy support in Section 1 processing
+    target_months = comp_ctx['main_target_months']
+    
+    # 3. Calculate Totals (Reference Data for NIB)
+    # Current Period Total (Main Report)
     current_total = 0
     if current_full_data:
         current_total = sum(current_full_data.monthly_totals.get(m, 0) for m in target_months)
         
-    # Previous Year (Y-o-Y)
-    prev_year_total = 0
+    # Comparison chart values (using specific comparison months)
+    current_yoy_val = 0
+    prev_year_yoy_val = 0
+    
+    if current_full_data:
+        current_yoy_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['yoy_curr_months'])
     if prev_full_data:
-        prev_year_total = sum(prev_full_data.monthly_totals.get(m, 0) for m in target_months)
-
-    # Previous Quarter (Q-o-Q)
-    prev_q_total = 0
-    prev_q_label = ""
-    has_prev_q_data = False
-    
-    if report.period_type == "Triwulan":
-        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
-        try:
-            curr_idx = tw_list.index(report.period_name)
-            if curr_idx > 0:
-                # Same year, prev quarter
-                prev_q_name = tw_list[curr_idx - 1]
-                prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
-                if current_full_data:
-                    prev_q_total = sum(current_full_data.monthly_totals.get(m, 0) for m in prev_q_months)
-                    has_prev_q_data = True
-                prev_q_label = f"{prev_q_name} {report.year}"
-            else:
-                # Prev year, TW IV
-                prev_q_name = "TW IV"
-                prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
-                if prev_full_data:
-                     prev_q_total = sum(prev_full_data.monthly_totals.get(m, 0) for m in prev_q_months)
-                     has_prev_q_data = True
-                prev_q_label = f"{prev_q_name} {report.year - 1}"
-        except ValueError:
-            pass
-    
-    elif report.period_type == "Semester":
-        # For Semester periods:
-        # Y-o-Y: Compare last TW of semester (TW II or TW IV) with same TW previous year
-        # Q-o-Q: Compare first TW vs last TW within semester (TW I vs TW II, or TW III vs TW IV)
+        prev_year_yoy_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx['yoy_prev_months'])
         
-        if report.period_name == "Semester I":
-            tw1_months = TRIWULAN_KE_BULAN["TW I"]
-            tw2_months = TRIWULAN_KE_BULAN["TW II"]
+    current_qoq_val = 0
+    prev_qoq_val = 0
+    
+    # Determine data source for QoQ Prev (Same year vs Prev year)
+    # Logic: For Triwulan report of TW I, prev q is TW IV (Year-1).
+    # For all user requested logic (Sem I, Sem II, Annual), comparisons are within same year or distinct periods.
+    # We need to be careful about WHERE we pull data from.
+    
+    # For QoQ Current Val
+    if current_full_data:
+        current_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_curr_months'])
+        
+    # For QoQ Prev Val
+    # Check if we need to pull from prev year file (Only for Triwulan I case)
+    if report.period_type == "Triwulan" and report.period_name == "TW I":
+         if prev_full_data:
+             prev_qoq_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_prev_months'])
+             comp_ctx['has_prev_q_data'] = True
+    else:
+         # Standard case (Same year)
+         if current_full_data:
+             prev_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_prev_months'])
+             comp_ctx['has_prev_q_data'] = True
             
-            # Q-o-Q: TW I vs TW II (same year)
-            if current_full_data:
-                tw1_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw1_months)
-                tw2_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw2_months)
-                prev_q_total = tw1_total  # TW I is "previous quarter"
-                has_prev_q_data = True
-                prev_q_label = f"TW I {report.year}"
-                # Store current quarter total for Q-o-Q chart (TW II)
-                current_q_total = tw2_total
-            
-            # Y-o-Y: TW II this year vs TW II previous year
-            if prev_full_data:
-                prev_year_tw2 = sum(prev_full_data.monthly_totals.get(m, 0) for m in tw2_months)
-                prev_year_total = prev_year_tw2
-                
-        elif report.period_name == "Semester II":
-            tw3_months = TRIWULAN_KE_BULAN["TW III"]
-            tw4_months = TRIWULAN_KE_BULAN["TW IV"]
-            
-            # Q-o-Q: TW III vs TW IV (same year)
-            if current_full_data:
-                tw3_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw3_months)
-                tw4_total = sum(current_full_data.monthly_totals.get(m, 0) for m in tw4_months)
-                prev_q_total = tw3_total  # TW III is "previous quarter"
-                has_prev_q_data = True
-                prev_q_label = f"TW III {report.year}"
-                # Store current quarter total for Q-o-Q chart (TW IV)
-                current_q_total = tw4_total
-            
-            # Y-o-Y: TW IV this year vs TW IV previous year
-            if prev_full_data:
-                prev_year_tw4 = sum(prev_full_data.monthly_totals.get(m, 0) for m in tw4_months)
-                prev_year_total = prev_year_tw4
+
     
     # === Top Row: Monthly Chart + Narrative ===
     col_top_left, col_top_right = st.columns([1, 1])
@@ -1442,45 +1488,18 @@ def render_report(report, stats: dict):
     # === Bottom Row: Y-o-Y + Q-o-Q ===
     col_btm_left, col_btm_right = st.columns(2)
     
-    # Determine labels based on period type
-    if report.period_type == "Semester":
-        if report.period_name == "Semester I":
-            yoy_current_label = f"TW II {report.year}"
-            yoy_prev_label = f"TW II {report.year - 1}"
-            qoq_current_label = f"TW II {report.year}"
-            qoq_prev_label = f"TW I {report.year}"
-            yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN II {report.year - 1} & TRIWULAN II {report.year} (y-o-y)"
-            qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN I {report.year} & TRIWULAN II {report.year} (q-o-q)"
-            # Use TW II totals for Y-o-Y and Q-o-Q
-            current_yoy_value = current_q_total if 'current_q_total' in dir() else current_total
-            current_qoq_value = current_q_total if 'current_q_total' in dir() else current_total
-        else:  # Semester II
-            yoy_current_label = f"TW IV {report.year}"
-            yoy_prev_label = f"TW IV {report.year - 1}"
-            qoq_current_label = f"TW IV {report.year}"
-            qoq_prev_label = f"TW III {report.year}"
-            yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN IV {report.year - 1} & TRIWULAN IV {report.year} (y-o-y)"
-            qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE TRIWULAN III {report.year} & TRIWULAN IV {report.year} (q-o-q)"
-            current_yoy_value = current_q_total if 'current_q_total' in dir() else current_total
-            current_qoq_value = current_q_total if 'current_q_total' in dir() else current_total
-    else:
-        yoy_current_label = f"{report.period_name} {report.year}"
-        yoy_prev_label = f"{report.period_name} {report.year - 1}"
-        qoq_current_label = f"{report.period_name} {report.year}"
-        qoq_prev_label = prev_q_label
-        yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {report.period_name} {report.year-1} & {report.period_name} {report.year} (y-o-y)"
-        qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {prev_q_label} & {report.period_name} {report.year} (q-o-q)"
-        current_yoy_value = current_total
-        current_qoq_value = current_total
-    
+    # Use standardized labels and values from centralized context
+    yoy_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {comp_ctx['yoy_prev_label']} & {comp_ctx['yoy_curr_label']} (y-o-y)"
+    qoq_title = f"JUMLAH NIB DI PROVINSI LAMPUNG\nPERIODE {comp_ctx['qoq_prev_label']} & {comp_ctx['qoq_curr_label']} (q-o-q)"
+
     with col_btm_left:
         # Y-o-Y Chart
         if prev_full_data:
              fig_yoy = chart_gen.create_qoq_comparison_bar(
-                current_data={yoy_current_label: current_yoy_value},
-                previous_data={yoy_prev_label: prev_year_total},
-                current_label=yoy_current_label,
-                previous_label=yoy_prev_label,
+                current_data={comp_ctx['yoy_curr_label']: current_yoy_val},
+                previous_data={comp_ctx['yoy_prev_label']: prev_year_yoy_val},
+                current_label=comp_ctx['yoy_curr_label'],
+                previous_label=comp_ctx['yoy_prev_label'],
                 title=yoy_title
              )
              st.plotly_chart(fig_yoy, use_container_width=True)
@@ -1489,12 +1508,12 @@ def render_report(report, stats: dict):
 
     with col_btm_right:
         # Q-o-Q Chart
-        if has_prev_q_data:
+        if comp_ctx['has_prev_q_data']:
              fig_qoq = chart_gen.create_qoq_comparison_bar(
-                current_data={qoq_current_label: current_qoq_value},
-                previous_data={qoq_prev_label: prev_q_total},
-                current_label=qoq_current_label,
-                previous_label=qoq_prev_label,
+                current_data={comp_ctx['qoq_curr_label']: current_qoq_val},
+                previous_data={comp_ctx['qoq_prev_label']: prev_qoq_val},
+                current_label=comp_ctx['qoq_curr_label'],
+                previous_label=comp_ctx['qoq_prev_label'],
                 title=qoq_title
              )
              st.plotly_chart(fig_qoq, use_container_width=True)
@@ -1546,65 +1565,55 @@ def render_report(report, stats: dict):
     tw1_pma, tw1_pmdn, tw2_pma, tw2_pmdn = 0, 0, 0, 0
     prev_year_tw_pma, prev_year_tw_pmdn = 0, 0
     
-    if report.period_type == "Semester" and report.period_name == "Semester I":
-        tw1_months = TRIWULAN_KE_BULAN["TW I"]
-        tw2_months = TRIWULAN_KE_BULAN["TW II"]
-        
-        if current_full_data:
-            # Get TW I PM totals
-            tw1_pm = current_full_data.get_period_by_pm_status(tw1_months)
-            tw1_pma = tw1_pm.get('PMA', 0)
-            tw1_pmdn = tw1_pm.get('PMDN', 0)
-            
-            # Get TW II PM totals
-            tw2_pm = current_full_data.get_period_by_pm_status(tw2_months)
-            tw2_pma = tw2_pm.get('PMA', 0)
-            tw2_pmdn = tw2_pm.get('PMDN', 0)
-        
-        if prev_full_data:
-            # Get TW II prev year PM totals
-            prev_tw2_pm = prev_full_data.get_period_by_pm_status(tw2_months)
-            prev_year_tw_pma = prev_tw2_pm.get('PMA', 0)
-            prev_year_tw_pmdn = prev_tw2_pm.get('PMDN', 0)
-            
-    elif report.period_type == "Semester" and report.period_name == "Semester II":
-        tw3_months = TRIWULAN_KE_BULAN["TW III"]
-        tw4_months = TRIWULAN_KE_BULAN["TW IV"]
-        
-        if current_full_data:
-            tw3_pm = current_full_data.get_period_by_pm_status(tw3_months)
-            tw1_pma = tw3_pm.get('PMA', 0)  # Using tw1 var for "first TW of semester"
-            tw1_pmdn = tw3_pm.get('PMDN', 0)
-            
-            tw4_pm = current_full_data.get_period_by_pm_status(tw4_months)
-            tw2_pma = tw4_pm.get('PMA', 0)  # Using tw2 var for "second TW of semester"
-            tw2_pmdn = tw4_pm.get('PMDN', 0)
-        
-        if prev_full_data:
-            prev_tw4_pm = prev_full_data.get_period_by_pm_status(tw4_months)
-            prev_year_tw_pma = prev_tw4_pm.get('PMA', 0)
-            prev_year_tw_pmdn = prev_tw4_pm.get('PMDN', 0)
+    # Calculate Comparison Values using Centralized Context
+    # YoY Values
+    yoy_curr_pma = 0
+    yoy_curr_pmdn = 0
+    yoy_prev_pma = 0
+    yoy_prev_pmdn = 0
     
-    elif report.period_type == "Triwulan":
-        # For Triwulan, use current period as current and prev Q for comparison
-        if current_full_data:
-            curr_pm = current_full_data.get_period_by_pm_status(target_months)
-            tw2_pma = curr_pm.get('PMA', 0)
-            tw2_pmdn = curr_pm.get('PMDN', 0)
+    if current_full_data:
+        curr_yoy_pm = current_full_data.get_period_by_pm_status(comp_ctx['yoy_curr_months'])
+        yoy_curr_pma = curr_yoy_pm.get('PMA', 0)
+        yoy_curr_pmdn = curr_yoy_pm.get('PMDN', 0)
         
-        if has_prev_q_data and current_full_data:
-            prev_q_pm_months = TRIWULAN_KE_BULAN.get(prev_q_label.split()[0] + " " + prev_q_label.split()[1], []) if len(prev_q_label.split()) >= 2 else []
-            if prev_q_label.startswith("TW"):
-                tw_name = " ".join(prev_q_label.split()[:2])
-                if tw_name in TRIWULAN_KE_BULAN:
-                    prev_q_pm_data = current_full_data.get_period_by_pm_status(TRIWULAN_KE_BULAN[tw_name])
-                    tw1_pma = prev_q_pm_data.get('PMA', 0)
-                    tw1_pmdn = prev_q_pm_data.get('PMDN', 0)
+    if prev_full_data:
+        prev_yoy_pm = prev_full_data.get_period_by_pm_status(comp_ctx['yoy_prev_months'])
+        yoy_prev_pma = prev_yoy_pm.get('PMA', 0)
+        yoy_prev_pmdn = prev_yoy_pm.get('PMDN', 0)
+
+    # QoQ Values
+    qoq_curr_pma = 0
+    qoq_curr_pmdn = 0
+    qoq_prev_pma = 0
+    qoq_prev_pmdn = 0
+    
+    if current_full_data:
+        curr_qoq_pm = current_full_data.get_period_by_pm_status(comp_ctx['qoq_curr_months'])
+        qoq_curr_pma = curr_qoq_pm.get('PMA', 0)
+        qoq_curr_pmdn = curr_qoq_pm.get('PMDN', 0)
         
-        if prev_full_data:
-            prev_year_pm = prev_full_data.get_period_by_pm_status(target_months)
-            prev_year_tw_pma = prev_year_pm.get('PMA', 0)
-            prev_year_tw_pmdn = prev_year_pm.get('PMDN', 0)
+    # QoQ Prev Calculation (Handle cross-year logic via flag)
+    # Logic: if comp_ctx['has_prev_q_data'] is True, we know data is available somewhere (curr or prev file).
+    # We need to determine SOURCE similar to centralized block but for PM breakdown.
+    
+    # Simpler approach:
+    # If standard Triwulan Q1 case: pull from prev file if available.
+    # If other cases: pull from curr file.
+    
+    prev_q_months = comp_ctx['qoq_prev_months']
+    if prev_q_months: # explicit check
+        if report.period_type == "Triwulan" and report.period_name == "TW I":
+             if prev_full_data:
+                  prev_qoq_pm = prev_full_data.get_period_by_pm_status(prev_q_months)
+                  qoq_prev_pma = prev_qoq_pm.get('PMA', 0)
+                  qoq_prev_pmdn = prev_qoq_pm.get('PMDN', 0)
+        else: # Standard same-year comparison
+             if current_full_data:
+                  prev_qoq_pm = current_full_data.get_period_by_pm_status(prev_q_months)
+                  qoq_prev_pma = prev_qoq_pm.get('PMA', 0)
+                  qoq_prev_pmdn = prev_qoq_pm.get('PMDN', 0)
+
     
     # === Row 1: PM Bar Chart + Table ===
     col_pm1, col_pm2 = st.columns([1, 1.5])
@@ -1631,33 +1640,19 @@ def render_report(report, stats: dict):
     # === Row 2: Y-o-Y and Q-o-Q PM Comparison Charts ===
     col_pm_yoy, col_pm_qoq = st.columns(2)
     
+    yoy_title = f"Status PM: {comp_ctx['yoy_prev_label']} vs {comp_ctx['yoy_curr_label']} (Y-o-Y)"
+    qoq_title = f"Status PM: {comp_ctx['qoq_prev_label']} vs {comp_ctx['qoq_curr_label']} (Q-o-Q)"
+    
     with col_pm_yoy:
         # Y-o-Y PM Comparison
-        if prev_full_data and (prev_year_tw_pma > 0 or prev_year_tw_pmdn > 0):
-            if report.period_type == "Semester":
-                if report.period_name == "Semester I":
-                    yoy_title = f"Status PM: TW II {report.year - 1} vs TW II {report.year} (Y-o-Y)"
-                    curr_label = f"TW II {report.year}"
-                    prev_label = f"TW II {report.year - 1}"
-                    yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
-                else:
-                    yoy_title = f"Status PM: TW IV {report.year - 1} vs TW IV {report.year} (Y-o-Y)"
-                    curr_label = f"TW IV {report.year}"
-                    prev_label = f"TW IV {report.year - 1}"
-                    yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
-            else:
-                yoy_title = f"Status PM: {report.period_name} {report.year - 1} vs {report.year} (Y-o-Y)"
-                curr_label = f"{report.period_name} {report.year}"
-                prev_label = f"{report.period_name} {report.year - 1}"
-                yoy_curr_pma, yoy_curr_pmdn = tw2_pma, tw2_pmdn
-            
+        if prev_full_data:
             fig_pm_yoy = chart_gen.create_pm_grouped_comparison(
                 current_pma=yoy_curr_pma,
                 current_pmdn=yoy_curr_pmdn,
-                prev_pma=prev_year_tw_pma,
-                prev_pmdn=prev_year_tw_pmdn,
-                current_label=curr_label,
-                prev_label=prev_label,
+                prev_pma=yoy_prev_pma,
+                prev_pmdn=yoy_prev_pmdn,
+                current_label=comp_ctx['yoy_curr_label'],
+                prev_label=comp_ctx['yoy_prev_label'],
                 title=yoy_title
             )
             st.plotly_chart(fig_pm_yoy, use_container_width=True)
@@ -1666,28 +1661,14 @@ def render_report(report, stats: dict):
     
     with col_pm_qoq:
         # Q-o-Q PM Comparison
-        if tw1_pma > 0 or tw1_pmdn > 0 or tw2_pma > 0 or tw2_pmdn > 0:
-            if report.period_type == "Semester":
-                if report.period_name == "Semester I":
-                    qoq_title = f"Status PM: TW I vs TW II {report.year} (Q-o-Q)"
-                    curr_label = f"TW II {report.year}"
-                    prev_label = f"TW I {report.year}"
-                else:
-                    qoq_title = f"Status PM: TW III vs TW IV {report.year} (Q-o-Q)"
-                    curr_label = f"TW IV {report.year}"
-                    prev_label = f"TW III {report.year}"
-            else:
-                qoq_title = f"Status PM: {prev_q_label} vs {report.period_name} {report.year} (Q-o-Q)"
-                curr_label = f"{report.period_name} {report.year}"
-                prev_label = prev_q_label
-            
+        if comp_ctx['has_prev_q_data']:
             fig_pm_qoq = chart_gen.create_pm_grouped_comparison(
-                current_pma=tw2_pma,
-                current_pmdn=tw2_pmdn,
-                prev_pma=tw1_pma,
-                prev_pmdn=tw1_pmdn,
-                current_label=curr_label,
-                prev_label=prev_label,
+                current_pma=qoq_curr_pma,
+                current_pmdn=qoq_curr_pmdn,
+                prev_pma=qoq_prev_pma,
+                prev_pmdn=qoq_prev_pmdn,
+                current_label=comp_ctx['qoq_curr_label'],
+                prev_label=comp_ctx['qoq_prev_label'],
                 title=qoq_title
             )
             st.plotly_chart(fig_pm_qoq, use_container_width=True)
@@ -1731,52 +1712,35 @@ def render_report(report, stats: dict):
     if current_full_data:
         current_umk, current_non_umk = aggregate_pelaku_usaha(current_full_data, target_months)
 
-    # Calculate TW-level Pelaku Usaha data for comparisons
-    tw1_umk, tw1_non_umk, tw2_umk, tw2_non_umk = 0, 0, 0, 0
-    prev_year_tw_umk, prev_year_tw_non_umk = 0, 0
+    # Calculate Comparison Values using Centralized Context
+    # Helper reuse
+    # YoY Values
+    yoy_curr_umk, yoy_curr_non_umk = 0, 0
+    yoy_prev_umk, yoy_prev_non_umk = 0, 0
     
-    if report.period_type == "Semester" and report.period_name == "Semester I":
-        tw1_months = TRIWULAN_KE_BULAN["TW I"]
-        tw2_months = TRIWULAN_KE_BULAN["TW II"]
+    if current_full_data:
+        yoy_curr_umk, yoy_curr_non_umk = aggregate_pelaku_usaha(current_full_data, comp_ctx['yoy_curr_months'])
         
-        if current_full_data:
-            tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, tw1_months)
-            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, tw2_months)
+    if prev_full_data:
+        yoy_prev_umk, yoy_prev_non_umk = aggregate_pelaku_usaha(prev_full_data, comp_ctx['yoy_prev_months'])
         
-        if prev_full_data:
-            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, tw2_months)
-            
-    elif report.period_type == "Semester" and report.period_name == "Semester II":
-        tw3_months = TRIWULAN_KE_BULAN["TW III"]
-        tw4_months = TRIWULAN_KE_BULAN["TW IV"]
-        
-        if current_full_data:
-            tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(current_full_data, tw3_months) # Using tw1 var for first TW 
-            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, tw4_months) # Using tw2 var for second TW
-        
-        if prev_full_data:
-            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, tw4_months)
+    # QoQ Values
+    qoq_curr_umk, qoq_curr_non_umk = 0, 0
+    qoq_prev_umk, qoq_prev_non_umk = 0, 0
     
-    elif report.period_type == "Triwulan":
-        if current_full_data:
-            tw2_umk, tw2_non_umk = aggregate_pelaku_usaha(current_full_data, target_months)
+    if current_full_data:
+        qoq_curr_umk, qoq_curr_non_umk = aggregate_pelaku_usaha(current_full_data, comp_ctx['qoq_curr_months'])
         
-        # Q-o-Q Logic: Handle cross-year (TW I) vs same-year (TW II-IV)
-        if has_prev_q_data:
-             # prev_q_label is like "TW IV 2024" or "TW I 2025"
-             parts = prev_q_label.split()
-             if len(parts) >= 3:
-                 prev_q_name = f"{parts[0]} {parts[1]}" # "TW IV"
-                 prev_q_year_str = parts[2]
-                 
-                 # Decide source: current year file or prev year file?
-                 source_data = current_full_data if str(report.year) == prev_q_year_str else prev_full_data
-                 
-                 if source_data and prev_q_name in TRIWULAN_KE_BULAN:
-                     tw1_umk, tw1_non_umk = aggregate_pelaku_usaha(source_data, TRIWULAN_KE_BULAN[prev_q_name])
-        
-        if prev_full_data:
-            prev_year_tw_umk, prev_year_tw_non_umk = aggregate_pelaku_usaha(prev_full_data, target_months)
+    # QoQ Prev Calculation
+    prev_q_months = comp_ctx['qoq_prev_months']
+    if prev_q_months:
+        if report.period_type == "Triwulan" and report.period_name == "TW I":
+             if prev_full_data:
+                 qoq_prev_umk, qoq_prev_non_umk = aggregate_pelaku_usaha(prev_full_data, prev_q_months)
+        else:
+             if current_full_data:
+                 qoq_prev_umk, qoq_prev_non_umk = aggregate_pelaku_usaha(current_full_data, prev_q_months)
+
 
     # === Row 1: Pelaku Usaha Bar Chart + Table ===
     col_pelaku1, col_pelaku2 = st.columns([1, 1.5])
@@ -1809,33 +1773,19 @@ def render_report(report, stats: dict):
     # === Row 2: Y-o-Y and Q-o-Q Pelaku Usaha Comparisons ===
     col_pelaku_yoy, col_pelaku_qoq = st.columns(2)
     
+    yoy_title = f"Kategori Pelaku Usaha: {comp_ctx['yoy_prev_label']} vs {comp_ctx['yoy_curr_label']} (Y-o-Y)"
+    qoq_title = f"Kategori Pelaku Usaha: {comp_ctx['qoq_prev_label']} vs {comp_ctx['qoq_curr_label']} (Q-o-Q)"
+    
     with col_pelaku_yoy:
         # Y-o-Y Comparison
-        if prev_full_data and (prev_year_tw_umk > 0 or prev_year_tw_non_umk > 0):
-            if report.period_type == "Semester":
-                if report.period_name == "Semester I":
-                    yoy_title = f"Kategori Pelaku Usaha: TW II {report.year - 1} vs TW II {report.year} (Y-o-Y)"
-                    curr_label = f"TW II {report.year}"
-                    prev_label = f"TW II {report.year - 1}"
-                    yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
-                else:
-                    yoy_title = f"Kategori Pelaku Usaha: TW IV {report.year - 1} vs TW IV {report.year} (Y-o-Y)"
-                    curr_label = f"TW IV {report.year}"
-                    prev_label = f"TW IV {report.year - 1}"
-                    yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
-            else:
-                yoy_title = f"Kategori Pelaku Usaha: {report.period_name} {report.year - 1} vs {report.year} (Y-o-Y)"
-                curr_label = f"{report.period_name} {report.year}"
-                prev_label = f"{report.period_name} {report.year - 1}"
-                yoy_curr_umk, yoy_curr_non_umk = tw2_umk, tw2_non_umk
-            
+        if prev_full_data:
             fig_pelaku_yoy = chart_gen.create_pelaku_grouped_comparison(
                 current_umk=yoy_curr_umk,
                 current_non_umk=yoy_curr_non_umk,
-                prev_umk=prev_year_tw_umk,
-                prev_non_umk=prev_year_tw_non_umk,
-                current_label=curr_label,
-                prev_label=prev_label,
+                prev_umk=yoy_prev_umk,
+                prev_non_umk=yoy_prev_non_umk,
+                current_label=comp_ctx['yoy_curr_label'],
+                prev_label=comp_ctx['yoy_prev_label'],
                 title=yoy_title
             )
             st.plotly_chart(fig_pelaku_yoy, use_container_width=True)
@@ -1845,72 +1795,20 @@ def render_report(report, stats: dict):
     
     with col_pelaku_qoq:
         # Q-o-Q Comparison
-        if tw1_umk > 0 or tw1_non_umk > 0 or tw2_umk > 0 or tw2_non_umk > 0:
-            if report.period_type == "Semester":
-                if report.period_name == "Semester I":
-                    qoq_title = f"Kategori Pelaku Usaha: TW I vs TW II {report.year} (Q-o-Q)"
-                    curr_label = f"TW II {report.year}"
-                    prev_label = f"TW I {report.year}"
-                else:
-                    qoq_title = f"Kategori Pelaku Usaha: TW III vs TW IV {report.year} (Q-o-Q)"
-                    curr_label = f"TW IV {report.year}"
-                    prev_label = f"TW III {report.year}"
-            else:
-                qoq_title = f"Kategori Pelaku Usaha: {prev_q_label} vs {report.period_name} {report.year} (Q-o-Q)"
-                curr_label = f"{report.period_name} {report.year}"
-                prev_label = prev_q_label
-            
+        if comp_ctx['has_prev_q_data']:
             fig_pelaku_qoq = chart_gen.create_pelaku_grouped_comparison(
-                current_umk=tw2_umk,
-                current_non_umk=tw2_non_umk,
-                prev_umk=tw1_umk,
-                prev_non_umk=tw1_non_umk,
-                current_label=curr_label,
-                prev_label=prev_label,
+                current_umk=qoq_curr_umk,
+                current_non_umk=qoq_curr_non_umk,
+                prev_umk=qoq_prev_umk,
+                prev_non_umk=qoq_prev_non_umk,
+                current_label=comp_ctx['qoq_curr_label'],
+                prev_label=comp_ctx['qoq_prev_label'],
                 title=qoq_title
             )
             st.plotly_chart(fig_pelaku_qoq, use_container_width=True)
         else:
             st.info("Data triwulan sebelumnya tidak tersedia untuk Q-o-Q")
-    sektor_risiko_data = stats.get('sektor_risiko', {})
-    if sektor_risiko_data:
-        st.markdown('<div class="section-title">1.5 Perizinan Berdasarkan Risiko dan Sektor</div>', 
-                    unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Risk distribution chart
-            fig_risk = chart_gen.create_risk_donut_chart(
-                rendah=sektor_risiko_data.get('risiko_rendah', 0),
-                menengah_rendah=sektor_risiko_data.get('risiko_menengah_rendah', 0),
-                menengah_tinggi=sektor_risiko_data.get('risiko_menengah_tinggi', 0),
-                tinggi=sektor_risiko_data.get('risiko_tinggi', 0)
-            )
-            st.plotly_chart(fig_risk, use_container_width=True)
-        
-        with col2:
-            # Sector distribution chart
-            sector_data = {
-                'Energi': sektor_risiko_data.get('sektor_energi', 0),
-                'Kelautan': sektor_risiko_data.get('sektor_kelautan', 0),
-                'Kesehatan': sektor_risiko_data.get('sektor_kesehatan', 0),
-                'Komunikasi': sektor_risiko_data.get('sektor_komunikasi', 0),
-                'Pariwisata': sektor_risiko_data.get('sektor_pariwisata', 0),
-                'Perhubungan': sektor_risiko_data.get('sektor_perhubungan', 0),
-                'Perindustrian': sektor_risiko_data.get('sektor_perindustrian', 0),
-                'Pertanian': sektor_risiko_data.get('sektor_pertanian', 0),
-            }
-            # Filter out zeros
-            sector_data = {k: v for k, v in sector_data.items() if v > 0}
-            if sector_data:
-                fig_sector = chart_gen.create_sector_distribution_chart(sector_data)
-                st.plotly_chart(fig_sector, use_container_width=True)
-        
-        # Generate sektor risiko narrative
-        sektor_narrative = generate_sektor_risiko_narrative(sektor_risiko_data)
-        st.markdown(f'<div class="narrative-box">{sektor_narrative}</div>', 
-                    unsafe_allow_html=True)
+
     
     # Section: Realisasi Investasi (if data available)
     investment_reports = st.session_state.get('investment_reports', None)
@@ -1985,24 +1883,28 @@ def render_report(report, stats: dict):
                 # Current Period Total
                 curr_total_proyek = get_proyek_total(current_proyek_data, target_months)
                 
+                # Current Period Total (Already calculated above as curr_total_proyek)
+                
                 # Y-o-Y Stats
-                prev_year_total_proyek = get_proyek_total(prev_proyek_data, target_months)
+                yoy_curr_proyek = get_proyek_total(current_proyek_data, comp_ctx['yoy_curr_months'])
+                prev_year_yoy_proyek = get_proyek_total(prev_proyek_data, comp_ctx['yoy_prev_months']) if prev_proyek_data else 0
                 
                 # Q-o-Q Stats
-                prev_q_total_proyek = 0
-                prev_q_source_data = None
-                prev_q_label_text = prev_q_label # e.g. "TW IV 2024" or "TW I 2025" from earlier global var
+                qoq_curr_proyek = get_proyek_total(current_proyek_data, comp_ctx['qoq_curr_months'])
+                prev_qoq_proyek = 0
                 
-                if has_prev_q_data: # Use global flag as hint that we should look for Q-o-Q
-                     # Determine source for Prev Q (Same Year or Prev Year)
-                     parts = prev_q_label.split()
-                     if len(parts) >= 3:
-                         prev_q_name = f"{parts[0]} {parts[1]}"
-                         prev_q_year_str = parts[2]
-                         prev_q_source_data = current_proyek_data if str(report.year) == prev_q_year_str else prev_proyek_data
-                         
-                         if prev_q_source_data and prev_q_name in TRIWULAN_KE_BULAN:
-                             prev_q_total_proyek = get_proyek_total(prev_q_source_data, TRIWULAN_KE_BULAN[prev_q_name])
+                # Logic for Prev QoQ Source
+                if comp_ctx['has_prev_q_data']:
+                     # Need to determine source file. 
+                     # If Triwulan I: prev q is in prev year file.
+                     # Else: prev q is in curr year file.
+                     prev_q_months = comp_ctx['qoq_prev_months']
+                     if report.period_type == "Triwulan" and report.period_name == "TW I":
+                         if prev_proyek_data:
+                             prev_qoq_proyek = get_proyek_total(prev_proyek_data, prev_q_months)
+                     else:
+                         if current_proyek_data:
+                             prev_qoq_proyek = get_proyek_total(current_proyek_data, prev_q_months)
                 
                 if current_proyek_data:
                     # Layout: Left Col (3 Charts), Right Col (1 Chart)
@@ -2026,19 +1928,17 @@ def render_report(report, stats: dict):
                             fig_monthly_proj.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
                             st.plotly_chart(fig_monthly_proj, use_container_width=True)
                         
+                        # Labels
+                        yoy_title = f"Jumlah Proyek: {comp_ctx['yoy_prev_label']} & {comp_ctx['yoy_curr_label']} (y-o-y)"
+                        qoq_title = f"Jumlah Proyek: {comp_ctx['qoq_prev_label']} & {comp_ctx['qoq_curr_label']} (q-o-q)"
+
                         # 2. Y-o-Y Chart
                         if prev_proyek_data:
-                             # Logic for label
-                             if report.period_type == "Semester":
-                                 pass # Logic handled by calc, just label
-                             
-                             yoy_title = f"Jumlah Proyek: {report.period_name} {report.year - 1} & {report.period_name} {report.year} (y-o-y)"
-                             
                              fig_yoy = chart_gen.create_comparison_bar_chart(
-                                 current_val=curr_total_proyek,
-                                 prev_val=prev_year_total_proyek,
-                                 current_label=f"{report.period_name} {report.year}",
-                                 prev_label=f"{report.period_name} {report.year - 1}",
+                                 current_val=yoy_curr_proyek,
+                                 prev_val=prev_year_yoy_proyek,
+                                 current_label=comp_ctx['yoy_curr_label'],
+                                 prev_label=comp_ctx['yoy_prev_label'],
                                  title=yoy_title
                              )
                              st.plotly_chart(fig_yoy, use_container_width=True)
@@ -2046,19 +1946,17 @@ def render_report(report, stats: dict):
                              st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
 
                         # 3. Q-o-Q Chart
-                        if prev_q_total_proyek > 0 or curr_total_proyek > 0 and has_prev_q_data:
-                             qoq_title = f"Jumlah Proyek: {prev_q_label_text} & {report.period_name} {report.year} (q-o-q)"
-                             
+                        if comp_ctx['has_prev_q_data']:
                              fig_qoq = chart_gen.create_comparison_bar_chart(
-                                 current_val=curr_total_proyek,
-                                 prev_val=prev_q_total_proyek,
-                                 current_label=f"{report.period_name} {report.year}",
-                                 prev_label=prev_q_label_text,
+                                 current_val=qoq_curr_proyek,
+                                 prev_val=prev_qoq_proyek,
+                                 current_label=comp_ctx['qoq_curr_label'],
+                                 prev_label=comp_ctx['qoq_prev_label'],
                                  title=qoq_title
                              )
                              st.plotly_chart(fig_qoq, use_container_width=True)
                         else:
-                             st.info(f"Data {prev_q_label_text} tidak tersedia untuk Q-o-Q")
+                             st.info("Data triwulan sebelumnya tidak tersedia untuk Q-o-Q")
 
                     with col_right:
                         # District (Kab/Kota) Chart - Tall
@@ -2091,15 +1989,15 @@ def render_report(report, stats: dict):
                     # Logic for narrative
                     total_proyek = curr_total_proyek
                     
-                    # Calculate growth stats for narrative
-                    if prev_year_total_proyek > 0:
-                        yoy_growth = ((curr_total_proyek - prev_year_total_proyek) / prev_year_total_proyek) * 100
+                    # Calculate growth stats for narrative (Using new standardized variables)
+                    if prev_year_yoy_proyek > 0:
+                        yoy_growth = ((yoy_curr_proyek - prev_year_yoy_proyek) / prev_year_yoy_proyek) * 100
                         yoy_text = f"{'meningkat' if yoy_growth >= 0 else 'menurun'} sebesar <b>{abs(yoy_growth):.2f}%</b>"
                     else:
                         yoy_text = "tidak dapat dibandingkan (data tahun lalu tidak tersedia)"
                         
-                    if prev_q_total_proyek > 0:
-                        qoq_growth = ((curr_total_proyek - prev_q_total_proyek) / prev_q_total_proyek) * 100
+                    if prev_qoq_proyek > 0:
+                        qoq_growth = ((qoq_curr_proyek - prev_qoq_proyek) / prev_qoq_proyek) * 100
                         qoq_text = f"{'meningkat' if qoq_growth >= 0 else 'menurun'} sebesar <b>{abs(qoq_growth):.2f}%</b>"
                     else:
                         qoq_text = "tidak dapat dibandingkan (data triwulan lalu tidak tersedia)"
@@ -2111,8 +2009,8 @@ def render_report(report, stats: dict):
                     Rekapitulasi jumlah proyek di Provinsi Lampung periode {report.period_name} Tahun {report.year} 
                     adalah sebanyak <b>{total_proyek:,}</b> proyek. <br>
                     Proyek tertinggi berada di lokasi <b>{top_kab[0]}</b> sebanyak <b>{top_kab[1]:,}</b> proyek.
-                    Jika dibandingkan dengan tahun sebelumnya ({report.period_name} {report.year-1}), mengalami {yoy_text}.
-                    Dan jika dibandingkan dengan triwulan sebelumnya ({prev_q_label_text}), mengalami {qoq_text}.
+                    Jika dibandingkan dengan periode {comp_ctx['yoy_prev_label']}, {comp_ctx['yoy_curr_label']} mengalami {yoy_text}.
+                    Dan jika dibandingkan dengan periode {comp_ctx['qoq_prev_label']}, {comp_ctx['qoq_curr_label']} mengalami {qoq_text}.
                     """
                     st.markdown(f'<div class="narrative-box">{interpretation}</div>', unsafe_allow_html=True)
             
@@ -2120,25 +2018,42 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             
             # --- CALCULATE PMA/PMDN STATS (PROJECT COUNTS) ---
+            # --- CALCULATE PMA/PMDN STATS (PROJECT COUNTS) ---
+            # Current Period Total (from investment object - already filtered for main chart)
             current_pma = current_investment.pma_proyek
             current_pmdn = current_investment.pmdn_proyek
             
             # Y-o-Y Stats
-            prev_year_pma = 0
-            prev_year_pmdn = 0
+            yoy_curr_pma, yoy_curr_pmdn = 0, 0
+            prev_year_yoy_pma, prev_year_yoy_pmdn = 0, 0
+            
+            if current_proyek_data:
+                yoy_curr_pma = current_proyek_data.get_period_pma_projects(comp_ctx['yoy_curr_months'])
+                yoy_curr_pmdn = current_proyek_data.get_period_pmdn_projects(comp_ctx['yoy_curr_months'])
+                
             if 'prev_proyek_data' in locals() and prev_proyek_data:
-                # Use helper in reference_loader via object method
-                 # Note: prev_proyek_data is ProyekReferenceData object
-                 prev_year_pma = prev_proyek_data.get_period_pma_projects(target_months)
-                 prev_year_pmdn = prev_proyek_data.get_period_pmdn_projects(target_months)
+                 prev_year_yoy_pma = prev_proyek_data.get_period_pma_projects(comp_ctx['yoy_prev_months'])
+                 prev_year_yoy_pmdn = prev_proyek_data.get_period_pmdn_projects(comp_ctx['yoy_prev_months'])
             
             # Q-o-Q Stats
-            prev_q_pma = 0
-            prev_q_pmdn = 0
-            if 'prev_q_source_data' in locals() and prev_q_source_data and 'prev_q_name' in locals():
-                 prev_q_months = TRIWULAN_KE_BULAN[prev_q_name]
-                 prev_q_pma = prev_q_source_data.get_period_pma_projects(prev_q_months)
-                 prev_q_pmdn = prev_q_source_data.get_period_pmdn_projects(prev_q_months)
+            qoq_curr_pma, qoq_curr_pmdn = 0, 0
+            prev_qoq_pma, prev_qoq_pmdn = 0, 0
+            
+            if current_proyek_data:
+                qoq_curr_pma = current_proyek_data.get_period_pma_projects(comp_ctx['qoq_curr_months'])
+                qoq_curr_pmdn = current_proyek_data.get_period_pmdn_projects(comp_ctx['qoq_curr_months'])
+
+            if comp_ctx['has_prev_q_data']:
+                  prev_q_months = comp_ctx['qoq_prev_months']
+                  # Determine Source
+                  if report.period_type == "Triwulan" and report.period_name == "TW I":
+                       if prev_proyek_data:
+                            prev_qoq_pma = prev_proyek_data.get_period_pma_projects(prev_q_months)
+                            prev_qoq_pmdn = prev_proyek_data.get_period_pmdn_projects(prev_q_months)
+                  else:
+                       if current_proyek_data:
+                            prev_qoq_pma = current_proyek_data.get_period_pma_projects(prev_q_months)
+                            prev_qoq_pmdn = current_proyek_data.get_period_pmdn_projects(prev_q_months)
 
             # --- RENDER 2.2 CHARTS ---
             col1, col2, col3 = st.columns(3)
@@ -2155,22 +2070,18 @@ def render_report(report, stats: dict):
             
             with col2:
                 # Y-o-Y Comparison
-                if 'prev_proyek_data' in locals() and prev_proyek_data:
-                     # Logic for label
-                     if report.period_type == "Semester":
-                         pass
-                     
-                     yoy_title = f"PMA & PMDN (y-o-y)"
-                     
+                yoy_title = f"PMA & PMDN (y-o-y)"
+                
+                if prev_proyek_data:
                      fig_yoy = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=current_pma,
-                         curr_val2=current_pmdn,
-                         prev_val1=prev_year_pma,
-                         prev_val2=prev_year_pmdn,
+                         curr_val1=yoy_curr_pma,
+                         curr_val2=yoy_curr_pmdn,
+                         prev_val1=prev_year_yoy_pma,
+                         prev_val2=prev_year_yoy_pmdn,
                          cat1_label="PMA",
                          cat2_label="PMDN",
-                         current_period_label=f"{report.period_name} {report.year}",
-                         prev_period_label=f"{report.period_name} {report.year - 1}",
+                         current_period_label=comp_ctx['yoy_curr_label'],
+                         prev_period_label=comp_ctx['yoy_prev_label'],
                          title=yoy_title,
                          y_axis_title="Jumlah Proyek"
                      )
@@ -2180,24 +2091,24 @@ def render_report(report, stats: dict):
 
             with col3:
                 # Q-o-Q Comparison
-                if (prev_q_pma > 0 or current_pma > 0) and has_prev_q_data:
-                     qoq_title = f"PMA & PMDN (q-o-q)"
-                     
+                qoq_title = f"PMA & PMDN (q-o-q)"
+                
+                if comp_ctx['has_prev_q_data']:
                      fig_qoq = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=current_pma,
-                         curr_val2=current_pmdn,
-                         prev_val1=prev_q_pma,
-                         prev_val2=prev_q_pmdn,
+                         curr_val1=qoq_curr_pma,
+                         curr_val2=qoq_curr_pmdn,
+                         prev_val1=prev_qoq_pma,
+                         prev_val2=prev_qoq_pmdn,
                          cat1_label="PMA",
                          cat2_label="PMDN",
-                         current_period_label=f"{report.period_name} {report.year}",
-                         prev_period_label=prev_q_label_text,
+                         current_period_label=comp_ctx['qoq_curr_label'],
+                         prev_period_label=comp_ctx['qoq_prev_label'],
                          title=qoq_title,
                          y_axis_title="Jumlah Proyek"
                      )
                      st.plotly_chart(fig_qoq, use_container_width=True)
                 else:
-                     st.info(f"Data {prev_q_label_text} tidak tersedia untuk Q-o-Q")
+                     st.info(f"Data {comp_ctx['qoq_prev_label']} tidak tersedia untuk Q-o-Q")
 
             # Narrative for 2.2
             pma_pmdn_narr = narrative_gen.generate_status_pm_narrative(
@@ -2226,136 +2137,146 @@ def render_report(report, stats: dict):
         else:
             st.info(f"Data investasi untuk {periode_name} tidak tersedia dalam file yang diupload.")
     
-    # Section: Rencana Proyek (if TW summary data available)
-    tw_summary = st.session_state.get('tw_summary', None)
+    # Section: Rencana Proyek (Detailed Sections 2.3 - 2.5)
+    # Refactored to rely on data availability rather than 'tw_summary'
+    
+    # 2.3 Skala Usaha visualization (Redesigned with Y-o-Y & Q-o-Q)
+    st.markdown('<div class="section-title">2.3 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
+                unsafe_allow_html=True)
+    
+    # Get current period's summary (if available, for legacy compatibility)
+    periode_name = report.period_name
+    current_summary = None
+    tw_summary = st.session_state.get('tw_summary')
     if tw_summary:
-        # This section content is now part of Section 2
-        # Removing old Section 3 header since it's merged into Section 2
-        
-        # Get current period's summary
-        periode_name = report.period_name
         current_summary = tw_summary.get(periode_name)
+            
+    # Get proyek data
+    proyek_data = None
+    proyek_file = st.session_state.get('proyek_ref_file')
+    proyek_prev_file = st.session_state.get('proyek_prev_ref_file')
+    
+    if proyek_file:
+        from app.data.reference_loader import ReferenceDataLoader
+        loader = ReferenceDataLoader()
+        months = loader.get_months_for_period(report.period_type, report.period_name)
         
-        if current_summary:
-            # 2.3 Skala Usaha visualization (Redesigned with Y-o-Y & Q-o-Q)
-            st.markdown('<div class="section-title">2.3 Rekapitulasi Data Proyek Berdasarkan Skala Usaha</div>', 
-                        unsafe_allow_html=True)
-            
-            # Get proyek data
-            proyek_data = None
-            proyek_file = st.session_state.get('proyek_ref_file')
-            proyek_prev_file = st.session_state.get('proyek_prev_ref_file')
-            
-            if proyek_file:
-                from app.data.reference_loader import ReferenceDataLoader
-                loader = ReferenceDataLoader()
-                months = loader.get_months_for_period(report.period_type, report.period_name)
+        # Load Current Data
+        proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
+        
+        # Load Previous Year Data (for Y-o-Y)
+        prev_proyek_data = None
+        if proyek_prev_file:
+            prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, report.year - 1)
                 
-                # Load Current Data
-                proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, report.year)
-                
-                # Load Previous Year Data (for Y-o-Y)
-                prev_proyek_data = None
-                if proyek_prev_file:
-                    prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, report.year - 1)
-                
-                # Determine Previous Quarter Data (for Q-o-Q)
-                prev_q_source_data = None
-                prev_q_name_str = None
-                
-                if has_prev_q_data:
-                     try:
-                         parts = prev_q_label.split() # e.g. "TW I 2025" or "TW IV 2024"
-                         if len(parts) >= 3:
-                             prev_q_name_str = f"{parts[0]} {parts[1]}"
-                             prev_q_year_str = parts[2]
-                             # Logic: If prev q year == current year, use current data. Else use prev data.
-                             prev_q_source_data = proyek_data if str(report.year) == prev_q_year_str else prev_proyek_data
-                     except Exception:
-                         pass
+        # Determine Previous Quarter Data (for Q-o-Q)
+        prev_q_source_data = None
+        prev_q_name_str = None
+        
+        if comp_ctx['has_prev_q_data']:
+                try:
+                    # Use centralized label
+                    prev_q_label = comp_ctx['qoq_prev_label']
+                    parts = prev_q_label.split() # e.g. "TW I 2025" or "TW IV 2024"
+                    if len(parts) >= 3:
+                        prev_q_name_str = f"{parts[0]} {parts[1]}"
+                        prev_q_year_str = parts[2]
+                        # Logic: If prev q year == current year, use current data. Else use prev data.
+                        prev_q_source_data = proyek_data if str(report.year) == prev_q_year_str else prev_proyek_data
+                except Exception:
+                    pass
 
-                if proyek_data:
-                    # Current Skala Usaha Data
-                    skala_data = proyek_data.get_period_by_skala_usaha(months)
-                    
-                    if skala_data:
-                        # Define standard keys and sort order
-                        std_keys = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
+        if proyek_data:
+            # Current Skala Usaha Data
+            skala_data = proyek_data.get_period_by_skala_usaha(months)
+            
+            if skala_data:
+                # Define standard keys and sort order
+                std_keys = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
+                
+                # --- 1. Current Period Chart ---
+                ordered_vals = [skala_data.get(k, 0) for k in std_keys]
+                
+                # Use generic simple bar chart logic or custom
+                fig_skala = go.Figure(data=[
+                    go.Bar(
+                        x=std_keys,
+                        y=ordered_vals,
+                        marker_color=['#3498db', '#e67e22', '#2ecc71', '#9b59b6'],
+                        text=[f'{v:,.0f}'.replace(",", ".") for v in ordered_vals],
+                        textposition='outside'
+                    )
+                ])
+                fig_skala.update_layout(
+                    title=f"Jumlah Proyek {report.period_name} {report.year} Berdasarkan Skala Usaha",
+                    yaxis_title='Jumlah Proyek',
+                    template='plotly_dark',
+                    height=400,
+                    **chart_gen.layout_defaults
+                )
+                st.plotly_chart(fig_skala, use_container_width=True)
+                
+                # --- 2. Comparison Charts (Bottom Row) ---
+                col_yoy, col_qoq = st.columns(2)
+                
+                with col_yoy:
+                    if prev_proyek_data:
+                        prev_skala_data = prev_proyek_data.get_period_by_skala_usaha(months)
+                        prev_vals = [prev_skala_data.get(k, 0) for k in std_keys]
                         
-                        # --- 1. Current Period Chart ---
-                        ordered_vals = [skala_data.get(k, 0) for k in std_keys]
-                        
-                        # Use generic simple bar chart logic or custom
-                        fig_skala = go.Figure(data=[
-                            go.Bar(
-                                x=std_keys,
-                                y=ordered_vals,
-                                marker_color=['#3498db', '#e67e22', '#2ecc71', '#9b59b6'],
-                                text=[f'{v:,.0f}'.replace(",", ".") for v in ordered_vals],
-                                textposition='outside'
-                            )
-                        ])
-                        fig_skala.update_layout(
-                            title=f"Jumlah Proyek {report.period_name} {report.year} Berdasarkan Skala Usaha",
-                            yaxis_title='Jumlah Proyek',
-                            template='plotly_dark',
-                            height=400,
-                            **chart_gen.layout_defaults
+                        fig_yoy_skala = chart_gen.create_grouped_comparison_multi_category(
+                            categories=[k.replace("Usaha ", "").upper() for k in std_keys], # Shorten labels
+                            current_values=ordered_vals,
+                            prev_values=prev_vals,
+                            current_label=f"{report.year}",
+                            prev_label=f"{report.year - 1}",
+                            title="Jumlah Proyek (y-o-y)",
+                            y_axis_title="Jumlah"
                         )
-                        st.plotly_chart(fig_skala, use_container_width=True)
-                        
-                        # --- 2. Comparison Charts (Bottom Row) ---
-                        col_yoy, col_qoq = st.columns(2)
-                        
-                        with col_yoy:
-                            if prev_proyek_data:
-                                prev_skala_data = prev_proyek_data.get_period_by_skala_usaha(months)
-                                prev_vals = [prev_skala_data.get(k, 0) for k in std_keys]
-                                
-                                fig_yoy_skala = chart_gen.create_grouped_comparison_multi_category(
-                                    categories=[k.replace("Usaha ", "").upper() for k in std_keys], # Shorten labels
-                                    current_values=ordered_vals,
-                                    prev_values=prev_vals,
-                                    current_label=f"{report.year}",
-                                    prev_label=f"{report.year - 1}",
-                                    title="Jumlah Proyek (y-o-y)",
-                                    y_axis_title="Jumlah"
-                                )
-                                st.plotly_chart(fig_yoy_skala, use_container_width=True)
-                            else:
-                                st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
-                        
-                        with col_qoq:
-                            if prev_q_source_data and prev_q_name_str and prev_q_name_str in TRIWULAN_KE_BULAN:
-                                pq_months = TRIWULAN_KE_BULAN[prev_q_name_str]
-                                pq_skala_data = prev_q_source_data.get_period_by_skala_usaha(pq_months)
-                                pq_vals = [pq_skala_data.get(k, 0) for k in std_keys]
-                                
-                                fig_qoq_skala = chart_gen.create_grouped_comparison_multi_category(
-                                    categories=[k.replace("Usaha ", "").upper() for k in std_keys],
-                                    current_values=ordered_vals,
-                                    prev_values=pq_vals,
-                                    current_label=f"{report.period_name}",
-                                    prev_label=prev_q_name_str,
-                                    title="Jumlah Proyek (q-o-q)",
-                                    y_axis_title="Jumlah"
-                                )
-                                st.plotly_chart(fig_qoq_skala, use_container_width=True)
-                            else:
-                                st.info(f"Data {prev_q_label_text if 'prev_q_label_text' in locals() else 'Q-o-Q'} tidak tersedia")
-
-                        
-                        # Interpretation for Skala Usaha (Comparison Narrative)
-                        interpretation_skala = narrative_gen.generate_skala_usaha_comparison_narrative(
-                            current_data=skala_data,
-                            prev_year_data=prev_proyek_data.get_period_by_skala_usaha(months) if prev_proyek_data else {},
-                            prev_q_data={}, # Optional
-                            period_name=report.period_name,
-                            year=report.year
-                        )
-                        st.markdown(f'<div class="narrative-box">{interpretation_skala}</div>', unsafe_allow_html=True)
+                        st.plotly_chart(fig_yoy_skala, use_container_width=True)
                     else:
-                        st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
+                        st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
+                
+                with col_qoq:
+                    # Combined lookup for flexibility
+                    combined_period_map = {**TRIWULAN_KE_BULAN, **SEMESTER_KE_BULAN}
+                    
+                    if prev_q_source_data and prev_q_name_str and prev_q_name_str in combined_period_map:
+                        pq_months = combined_period_map[prev_q_name_str]
+                        pq_skala_data = prev_q_source_data.get_period_by_skala_usaha(pq_months)
+                        pq_vals = [pq_skala_data.get(k, 0) for k in std_keys]
+                        
+                        # Get CORRECT Current Data for Comparison (e.g. Sem II if Annual)
+                        qoq_curr_months = comp_ctx['qoq_curr_months']
+                        # Use proyek_data (Current Year data source)
+                        qoq_curr_skala_data = proyek_data.get_period_by_skala_usaha(qoq_curr_months)
+                        qoq_curr_vals = [qoq_curr_skala_data.get(k, 0) for k in std_keys]
+                        
+                        fig_qoq_skala = chart_gen.create_grouped_comparison_multi_category(
+                            categories=[k.replace("Usaha ", "").upper() for k in std_keys],
+                            current_values=qoq_curr_vals,
+                            prev_values=pq_vals,
+                            current_label=comp_ctx['qoq_curr_label'],
+                            prev_label=prev_q_name_str,
+                            title="Jumlah Proyek (q-o-q)",
+                            y_axis_title="Jumlah"
+                        )
+                        st.plotly_chart(fig_qoq_skala, use_container_width=True)
+                    else:
+                        st.info(f"Data {comp_ctx.get('qoq_prev_label', 'Q-o-Q')} tidak tersedia")
+
+                
+                # Interpretation for Skala Usaha (Comparison Narrative)
+                interpretation_skala = narrative_gen.generate_skala_usaha_comparison_narrative(
+                    current_data=skala_data,
+                    prev_year_data=prev_proyek_data.get_period_by_skala_usaha(months) if prev_proyek_data else {},
+                    prev_q_data={}, # Optional
+                    period_name=report.period_name,
+                    year=report.year
+                )
+                st.markdown(f'<div class="narrative-box">{interpretation_skala}</div>', unsafe_allow_html=True)
+            else:
+                st.info("Data skala usaha tidak tersedia dalam file PROYEK.")
             
             # 2.4 Jumlah Investasi visualization
             st.markdown('<div class="section-title">2.4 Rekapitulasi Data Proyek Berdasarkan Jumlah Investasi</div>', 
@@ -2390,6 +2311,66 @@ def render_report(report, stats: dict):
                     <b>Rp {top_inv[1]/1e9:,.2f} Miliar</b> ({top_inv[1]/total_inv*100:.1f}% dari total investasi).
                     """
                     st.markdown(f'<div class="narrative-box">{interpretation_inv}</div>', unsafe_allow_html=True)
+                    
+                    # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 2.4) ==========
+                    import pandas as pd
+                    st.markdown(f'<div style="background: linear-gradient(90deg, #10B981, #34D399); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi Investasi per Kabupaten/Kota (Rp)</b></div>', unsafe_allow_html=True)
+                    
+                    # Build DataFrame with monthly columns
+                    table_data_inv = []
+                    # sorted_inv is already sorted by total desc
+                    
+                    for idx, (wilayah, total_inv) in enumerate(sorted_inv.items(), 1):
+                        row = {'No': idx, 'Kabupaten/Kota': wilayah}
+                        for month in months:
+                            m_data = proyek_data.monthly_by_wilayah.get(month, {})
+                            row[month] = m_data.get(wilayah, 0)
+                        row['JUMLAH'] = total_inv
+                        table_data_inv.append(row)
+                    
+                    inv_df = pd.DataFrame(table_data_inv)
+
+                    # Display with Plotly Table
+                    header_vals_inv = ['<b>NO</b>', '<b>KABUPATEN/KOTA</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+                    
+                    # Helper for currency formatting
+                    def fmt_idr(val):
+                        return f"{val:,.0f}".replace(",", ".")
+
+                    cell_vals_inv = [
+                        inv_df['No'].tolist(),
+                        inv_df['Kabupaten/Kota'].tolist()
+                    ]
+                    for m in months:
+                        cell_vals_inv.append([fmt_idr(v) for v in inv_df[m].tolist()])
+                    cell_vals_inv.append([fmt_idr(v) for v in inv_df['JUMLAH'].tolist()])
+                    
+                    inv_table = go.Figure(data=[go.Table(
+                        header=dict(
+                            values=header_vals_inv,
+                            fill_color='#059669',  # Green theme matches chart
+                            align=['center', 'left'] + ['center'] * (len(months) + 1),
+                            font=dict(color='white', size=12),
+                            height=40
+                        ),
+                        cells=dict(
+                            values=cell_vals_inv,
+                            fill_color=['#064E3B', '#065F46'], # Dark green theme
+                            align=['center', 'left'] + ['center'] * (len(months) + 1),
+                            font=dict(color='white', size=11),
+                            height=30,
+                            line_color='#334155'
+                        )
+                    )])
+                    
+                    inv_table.update_layout(
+                        margin=dict(l=0, r=0, t=10, b=0),
+                        height=min(400, len(table_data_inv) * 35 + 50),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)'
+                    )
+                    
+                    st.plotly_chart(inv_table, use_container_width=True)
             
             # 2.5 Tenaga Kerja visualization
             st.markdown('<div class="section-title">2.5 Rekapitulasi Data Proyek Berdasarkan Tenaga Kerja</div>', 
@@ -2442,8 +2423,8 @@ def render_report(report, stats: dict):
             )
             st.markdown(f'<div class="narrative-box">{project_narrative}</div>', 
                         unsafe_allow_html=True)
-        else:
-            st.info(f"Data ringkasan proyek untuk {periode_name} tidak tersedia.")
+            st.markdown(f'<div class="narrative-box">{project_narrative}</div>', 
+                        unsafe_allow_html=True)
 
     # ===========================================
     # Section 3: Perizinan Berusaha Berbasis Risiko (PB OSS data)
@@ -2507,9 +2488,11 @@ def render_report(report, stats: dict):
             
             prev_q_pb_data = None
             prev_q_name_pb = None
-            if has_prev_q_data:
+            if comp_ctx['has_prev_q_data']:
                  try:
-                     parts = prev_q_label.split()
+                     # Use centralized label
+                     prev_q_label_val = comp_ctx['qoq_prev_label']
+                     parts = prev_q_label_val.split()
                      if len(parts) >= 3:
                          prev_q_name_pb = f"{parts[0]} {parts[1]}"
                          prev_q_year_str = parts[2]
@@ -2517,19 +2500,29 @@ def render_report(report, stats: dict):
                  except Exception:
                      pass
 
-            # Calculate Totals
-            curr_permits = pb_data.get_period_permits(months)
+            # Calculate Totals using Centralized Context
+            # 1. Main Report Total
+            curr_permits = pb_data.get_period_permits(target_months)
             
-            prev_year_permits = 0
+            # 2. YoY Comparison Values
+            yoy_curr_permits = pb_data.get_period_permits(comp_ctx['yoy_curr_months'])
+            prev_year_yoy_permits = 0
             if prev_pb_data:
-                prev_year_permits = prev_pb_data.get_period_permits(months)
+                prev_year_yoy_permits = prev_pb_data.get_period_permits(comp_ctx['yoy_prev_months'])
             
-            prev_q_permits = 0
-            if prev_q_pb_data and prev_q_name_pb in TRIWULAN_KE_BULAN:
-                prev_q_months_pb = TRIWULAN_KE_BULAN[prev_q_name_pb]
-                prev_q_permits = prev_q_pb_data.get_period_permits(prev_q_months_pb)
+            # 3. QoQ Comparison Values
+            qoq_curr_permits = pb_data.get_period_permits(comp_ctx['qoq_curr_months'])
+            prev_qoq_permits = 0
+            
+            if comp_ctx['has_prev_q_data']:
+                  prev_q_months = comp_ctx['qoq_prev_months']
+                  # Determine Source
+                  if report.period_type == "Triwulan" and report.period_name == "TW I":
+                       if prev_pb_data:
+                            prev_qoq_permits = prev_pb_data.get_period_permits(prev_q_months)
+                  else:
+                       prev_qoq_permits = pb_data.get_period_permits(prev_q_months)
 
-            # --- Render 3.1 Charts ---
             # --- Render 3.1 Charts ---
             
             # Row 1: Monthly & Location
@@ -2537,7 +2530,7 @@ def render_report(report, stats: dict):
             
             with col_row1_1:
                 # Monthly Chart
-                monthly_permits = pb_data.get_period_permits_by_month(months) if hasattr(pb_data, 'get_period_permits_by_month') else {}
+                monthly_permits = pb_data.get_period_permits_by_month(target_months) if hasattr(pb_data, 'get_period_permits_by_month') else {}
                 if not monthly_permits: monthly_permits = {}
                 
                 if monthly_permits:
@@ -2553,7 +2546,7 @@ def render_report(report, stats: dict):
 
             with col_row1_2:
                 # Kab/Kota chart
-                kab_data = pb_data.get_period_by_kab_kota(months)
+                kab_data = pb_data.get_period_by_kab_kota(target_months)
                 if kab_data:
                     import plotly.graph_objects as go
                     # Show ALL Locations (Sorted)
@@ -2584,13 +2577,14 @@ def render_report(report, stats: dict):
             col_row2_1, col_row2_2 = st.columns(2)
             with col_row2_1:
                 # Y-o-Y
+                yoy_title = f"Total Perizinan (y-o-y)"
                 if prev_pb_data:
                     fig_yoy_pb = chart_gen.create_comparison_bar_chart(
-                        current_val=curr_permits,
-                        prev_val=prev_year_permits,
-                        current_label=f"{report.year}",
-                        prev_label=f"{report.year - 1}",
-                        title="Total Perizinan (y-o-y)"
+                        current_val=yoy_curr_permits,
+                        prev_val=prev_year_yoy_permits,
+                        current_label=comp_ctx['yoy_curr_label'],
+                        prev_label=comp_ctx['yoy_prev_label'],
+                        title=yoy_title
                     )
                     st.plotly_chart(fig_yoy_pb, use_container_width=True)
                 else:
@@ -2598,13 +2592,14 @@ def render_report(report, stats: dict):
             
             with col_row2_2:
                 # Q-o-Q
-                if prev_q_pb_data:
+                qoq_title = f"Total Perizinan (q-o-q)"
+                if comp_ctx['has_prev_q_data']:
                     fig_qoq_pb = chart_gen.create_comparison_bar_chart(
-                        current_val=curr_permits,
-                        prev_val=prev_q_permits,
-                        current_label=f"{report.period_name}",
-                        prev_label=f"{prev_q_name_pb}",
-                        title="Total Perizinan (q-o-q)"
+                        current_val=qoq_curr_permits,
+                        prev_val=prev_qoq_permits,
+                        current_label=comp_ctx['qoq_curr_label'],
+                        prev_label=comp_ctx['qoq_prev_label'],
+                        title=qoq_title
                     )
                     st.plotly_chart(fig_qoq_pb, use_container_width=True)
                 else:
@@ -2616,41 +2611,114 @@ def render_report(report, stats: dict):
                 total_permits=curr_permits,
                 monthly_permits=monthly_permits,
                 location_data=kab_data if kab_data else {},
-                prev_year_total=prev_year_permits,
-                prev_q_total=prev_q_permits,
-                prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya"
+                prev_year_total=prev_year_yoy_permits,
+                prev_q_total=prev_qoq_permits,
+                prev_q_label=comp_ctx['qoq_prev_label']
             )
             st.markdown(f'<div class="narrative-box">{narrative_3_1}</div>', unsafe_allow_html=True)
+
+            # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 3.1) ==========
+            import pandas as pd
+            st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi per Kabupaten/Kota</b></div>', unsafe_allow_html=True)
             
-            # 3.2 Status PM
+            # Build DataFrame with monthly columns
+            table_data_kab = []
+            # Use current aggregated data for sorting
+            sorted_kab_items = sorted(kab_data.items(), key=lambda x: x[1], reverse=True)
+            
+            for idx, (kab_name, total_count) in enumerate(sorted_kab_items, 1):
+                row = {'No': idx, 'Kabupaten/Kota': kab_name}
+                for month in months:
+                    m_data = pb_data.monthly_by_kab_kota.get(month, {})
+                    row[month] = m_data.get(kab_name, 0)
+                row['JUMLAH'] = total_count
+                table_data_kab.append(row)
+            
+            kab_df = pd.DataFrame(table_data_kab)
+
+            # Display with Plotly Table
+            header_vals_kab = ['<b>NO</b>', '<b>KABUPATEN/KOTA</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+            
+            cell_vals_kab = [
+                kab_df['No'].tolist(),
+                kab_df['Kabupaten/Kota'].tolist()
+            ]
+            for m in months:
+                cell_vals_kab.append(kab_df[m].tolist())
+            cell_vals_kab.append(kab_df['JUMLAH'].tolist())
+            
+            kab_table = go.Figure(data=[go.Table(
+                header=dict(
+                    values=header_vals_kab,
+                    fill_color='#1E40AF',
+                    align=['center', 'left'] + ['center'] * (len(months) + 1),
+                    font=dict(color='white', size=12),
+                    height=40
+                ),
+                cells=dict(
+                    values=cell_vals_kab,
+                    fill_color=['#0F172A', '#1E293B'],
+                    align=['center', 'left'] + ['center'] * (len(months) + 1),
+                    font=dict(color='white', size=11),
+                    height=30,
+                    line_color='#334155'
+                )
+            )])
+            
+            kab_table.update_layout(
+                margin=dict(l=0, r=0, t=10, b=0),
+                height=min(400, len(table_data_kab) * 35 + 50),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            st.plotly_chart(kab_table, use_container_width=True)
+            
             # 3.2 Status PM
             st.markdown('<div class="section-title">3.2 Rekapitulasi Berdasarkan Status Penanaman Modal</div>', 
                         unsafe_allow_html=True)
             
-            # 1. Calc Current
-            pm_data = pb_data.get_period_status_pm(months)
+            # 1. Calc Current (Main)
+            pm_data = pb_data.get_period_status_pm(target_months)
             curr_pma = pm_data.get('PMA', 0)
             curr_pmdn = pm_data.get('PMDN', 0)
             
             # 1b. Calc Monthly Breakdown (New)
-            pm_monthly_breakdown = pb_data.get_monthly_status_pm_breakdown(months)
+            pm_monthly_breakdown = pb_data.get_monthly_status_pm_breakdown(target_months)
             
-            # 2. Calc YoY
-            prev_year_pma = 0
-            prev_year_pmdn = 0
+            # 2. Calc YoY Stats
+            yoy_curr_pma, yoy_curr_pmdn = 0, 0
+            prev_year_yoy_pma, prev_year_yoy_pmdn = 0, 0
+            
+            # Total for comparison might differ from main chart if periods differ (e.g. Annual report main=Jan-Dec, YoY=Sem2)
+            yoy_pm_curr_dist = pb_data.get_period_status_pm(comp_ctx['yoy_curr_months'])
+            yoy_curr_pma = yoy_pm_curr_dist.get('PMA', 0)
+            yoy_curr_pmdn = yoy_pm_curr_dist.get('PMDN', 0)
+            
             if prev_pb_data:
-                 prev_pm_dist = prev_pb_data.get_period_status_pm(months)
-                 prev_year_pma = prev_pm_dist.get('PMA', 0)
-                 prev_year_pmdn = prev_pm_dist.get('PMDN', 0)
+                 prev_pm_dist = prev_pb_data.get_period_status_pm(comp_ctx['yoy_prev_months'])
+                 prev_year_yoy_pma = prev_pm_dist.get('PMA', 0)
+                 prev_year_yoy_pmdn = prev_pm_dist.get('PMDN', 0)
             
-            # 3. Calc QoQ
-            prev_q_pma = 0
-            prev_q_pmdn = 0
-            if prev_q_pb_data and prev_q_name_pb in TRIWULAN_KE_BULAN:
-                 prev_q_months_pb = TRIWULAN_KE_BULAN[prev_q_name_pb]
-                 prev_q_pm_dist = prev_q_pb_data.get_period_status_pm(prev_q_months_pb)
-                 prev_q_pma = prev_q_pm_dist.get('PMA', 0)
-                 prev_q_pmdn = prev_q_pm_dist.get('PMDN', 0)
+            # 3. Calc QoQ Stats
+            qoq_curr_pma, qoq_curr_pmdn = 0, 0
+            prev_qoq_pma, prev_qoq_pmdn = 0, 0
+            
+            qoq_pm_curr_dist = pb_data.get_period_status_pm(comp_ctx['qoq_curr_months'])
+            qoq_curr_pma = qoq_pm_curr_dist.get('PMA', 0)
+            qoq_curr_pmdn = qoq_pm_curr_dist.get('PMDN', 0)
+            
+            if comp_ctx['has_prev_q_data']:
+                  prev_q_months = comp_ctx['qoq_prev_months']
+                  if report.period_type == "Triwulan" and report.period_name == "TW I":
+                       if prev_pb_data:
+                            prev_qoq_dist = prev_pb_data.get_period_status_pm(prev_q_months)
+                            prev_qoq_pma = prev_qoq_dist.get('PMA', 0)
+                            prev_qoq_pmdn = prev_qoq_dist.get('PMDN', 0)
+                  else:
+                       prev_qoq_dist = pb_data.get_period_status_pm(prev_q_months)
+                       prev_qoq_pma = prev_qoq_dist.get('PMA', 0)
+                       prev_qoq_pmdn = prev_qoq_dist.get('PMDN', 0)
             
             # 4. Render Charts
             # ROW 1: Monthly Trend (Full Width)
@@ -2666,67 +2734,136 @@ def render_report(report, stats: dict):
             
             with col32_1:
                 # YoY Chart
+                yoy_title = "Perbandingan Y-o-Y (Perizinan)"
                 if prev_pb_data:
                      fig_yoy_pm = chart_gen.create_pm_grouped_comparison(
-                         current_pma=curr_pma,
-                         current_pmdn=curr_pmdn,
-                         prev_pma=prev_year_pma,
-                         prev_pmdn=prev_year_pmdn,
-                         current_label=f"{report.year}",
-                         prev_label=f"{report.year - 1}",
-                         title="Perbandingan Y-o-Y (Perizinan)"
+                         current_pma=yoy_curr_pma,
+                         current_pmdn=yoy_curr_pmdn,
+                         prev_pma=prev_year_yoy_pma,
+                         prev_pmdn=prev_year_yoy_pmdn,
+                         current_label=comp_ctx['yoy_curr_label'],
+                         prev_label=comp_ctx['yoy_prev_label'],
+                         title=yoy_title
                      )
                      st.plotly_chart(fig_yoy_pm, use_container_width=True)
                 else:
                      st.info("Upload file PB OSS tahun lalu untuk Y-o-Y (Status PM)")
-
+ 
             with col32_2:
                 # QoQ Chart
-                if prev_q_pb_data:
+                qoq_title = "Perbandingan Q-o-Q (Perizinan)"
+                if comp_ctx['has_prev_q_data']:
                      fig_qoq_pm = chart_gen.create_pm_grouped_comparison(
-                         current_pma=curr_pma,
-                         current_pmdn=curr_pmdn,
-                         prev_pma=prev_q_pma,
-                         prev_pmdn=prev_q_pmdn,
-                         current_label=f"{report.period_name}",
-                         prev_label=f"{prev_q_name_pb}",
-                         title="Perbandingan Q-o-Q (Perizinan)"
+                         current_pma=qoq_curr_pma,
+                         current_pmdn=qoq_curr_pmdn,
+                         prev_pma=prev_qoq_pma,
+                         prev_pmdn=prev_qoq_pmdn,
+                         current_label=comp_ctx['qoq_curr_label'],
+                         prev_label=comp_ctx['qoq_prev_label'],
+                         title=qoq_title
                      )
                      st.plotly_chart(fig_qoq_pm, use_container_width=True)
                 else:
                      st.info("Data Q-o-Q tidak tersedia")
             
-            # 5. Native Narrative
+            # 5. Native Narrative (Updated to use correct variables)
             narrative_3_2 = narrative_gen.generate_status_pm_comparison_narrative(
                 report=report,
                 curr_pma=curr_pma,
                 curr_pmdn=curr_pmdn,
-                prev_year_pma=prev_year_pma,
-                prev_year_pmdn=prev_year_pmdn,
-                prev_q_pma=prev_q_pma,
-                prev_q_pmdn=prev_q_pmdn,
-                prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya",
+                prev_year_pma=prev_year_yoy_pma,
+                prev_year_pmdn=prev_year_yoy_pmdn,
+                prev_q_pma=prev_qoq_pma,
+                prev_q_pmdn=prev_qoq_pmdn,
+                prev_q_label=comp_ctx['qoq_prev_label'],
                 monthly_breakdown=pm_monthly_breakdown
             )
             st.markdown(f'<div class="narrative-box">{narrative_3_2}</div>', unsafe_allow_html=True)
+
+            # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 3.2) ==========
+            import pandas as pd
+            st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi Status Penanaman Modal</b></div>', unsafe_allow_html=True)
             
+            # Build DataFrame with monthly columns
+            table_data_pm = []
+            sorted_pm_items = sorted(pm_data.items(), key=lambda x: x[1], reverse=True)
+            
+            for idx, (pm_name, total_count) in enumerate(sorted_pm_items, 1):
+                row = {'No': idx, 'Status PM': pm_name}
+                for month in months:
+                    m_data = pb_data.monthly_status_pm.get(month, {})
+                    row[month] = m_data.get(pm_name, 0)
+                row['JUMLAH'] = total_count
+                table_data_pm.append(row)
+            
+            pm_df = pd.DataFrame(table_data_pm)
+
+            # Display with Plotly Table
+            header_vals_pm = ['<b>NO</b>', '<b>STATUS PM</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+            
+            cell_vals_pm = [
+                pm_df['No'].tolist(),
+                pm_df['Status PM'].tolist()
+            ]
+            for m in months:
+                cell_vals_pm.append(pm_df[m].tolist())
+            cell_vals_pm.append(pm_df['JUMLAH'].tolist())
+            
+            pm_table = go.Figure(data=[go.Table(
+                header=dict(
+                    values=header_vals_pm,
+                    fill_color='#1E40AF',
+                    align=['center', 'left'] + ['center'] * (len(months) + 1),
+                    font=dict(color='white', size=12),
+                    height=40
+                ),
+                cells=dict(
+                    values=cell_vals_pm,
+                    fill_color=['#0F172A', '#1E293B'],
+                    align=['center', 'left'] + ['center'] * (len(months) + 1),
+                    font=dict(color='white', size=11),
+                    height=30,
+                    line_color='#334155'
+                )
+            )])
+            
+            pm_table.update_layout(
+                margin=dict(l=0, r=0, t=10, b=0),
+                height=min(400, len(table_data_pm) * 35 + 50),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            st.plotly_chart(pm_table, use_container_width=True)
+
             # 3.3 Risk Level
             st.markdown('<div class="section-title">3.3 Rekapitulasi Berdasarkan Tingkat Risiko</div>', 
                         unsafe_allow_html=True)
             
-            # 1. Calc Current Risk
-            risk_data = pb_data.get_period_risk(months)
+            # 1. Calc Current Risk (Main Chart)
+            risk_data = pb_data.get_period_risk(target_months)
             
-            # 2. Calc YoY Risk
-            prev_year_risk = {}
+            # 2. Calc YoY Risk Stats
+            yoy_curr_risk = {}
+            prev_year_yoy_risk = {}
+            
+            yoy_curr_risk = pb_data.get_period_risk(comp_ctx['yoy_curr_months'])
             if prev_pb_data:
-                 prev_year_risk = prev_pb_data.get_period_risk(months)
+                 prev_year_yoy_risk = prev_pb_data.get_period_risk(comp_ctx['yoy_prev_months'])
             
-            # 3. Calc QoQ Risk
-            prev_q_risk = {}
-            if prev_q_pb_data and prev_q_name_pb in TRIWULAN_KE_BULAN:
-                 prev_q_months_pb = TRIWULAN_KE_BULAN[prev_q_name_pb]
-                 prev_q_risk = prev_q_pb_data.get_period_risk(prev_q_months_pb)
+            # 3. Calc QoQ Risk Stats
+            qoq_curr_risk = {}
+            prev_qoq_risk = {}
+            
+            qoq_curr_risk = pb_data.get_period_risk(comp_ctx['qoq_curr_months'])
+            
+            if comp_ctx['has_prev_q_data']:
+                  prev_q_months = comp_ctx['qoq_prev_months']
+                  if report.period_type == "Triwulan" and report.period_name == "TW I":
+                       if prev_pb_data:
+                            prev_qoq_risk = prev_pb_data.get_period_risk(prev_q_months)
+                  else:
+                       prev_qoq_risk = pb_data.get_period_risk(prev_q_months)
 
             if risk_data:
                 import plotly.graph_objects as go
@@ -2754,12 +2891,12 @@ def render_report(report, stats: dict):
                 
                 with col33_1:
                     # YoY Risk Chart
-                    if prev_year_risk:
+                    if prev_pb_data:
                          fig_yoy_risk = chart_gen.create_risk_grouped_comparison(
-                             current_data=risk_data,
-                             prev_data=prev_year_risk,
-                             current_label=f"{report.year}",
-                             prev_label=f"{report.year - 1}",
+                             current_data=yoy_curr_risk,
+                             prev_data=prev_year_yoy_risk,
+                             current_label=comp_ctx['yoy_curr_label'],
+                             prev_label=comp_ctx['yoy_prev_label'],
                              title="Risiko Y-o-Y"
                          )
                          st.plotly_chart(fig_yoy_risk, use_container_width=True)
@@ -2768,12 +2905,12 @@ def render_report(report, stats: dict):
 
                 with col33_2:
                     # QoQ Risk Chart
-                    if prev_q_risk:
+                    if comp_ctx['has_prev_q_data']:
                          fig_qoq_risk = chart_gen.create_risk_grouped_comparison(
-                             current_data=risk_data,
-                             prev_data=prev_q_risk,
-                             current_label=f"{report.period_name}",
-                             prev_label=f"{prev_q_name_pb}",
+                             current_data=qoq_curr_risk,
+                             prev_data=prev_qoq_risk,
+                             current_label=comp_ctx['qoq_curr_label'],
+                             prev_label=comp_ctx['qoq_prev_label'],
                              title="Risiko Q-o-Q"
                          )
                          st.plotly_chart(fig_qoq_risk, use_container_width=True)
@@ -2784,11 +2921,79 @@ def render_report(report, stats: dict):
                 narrative_3_3 = narrative_gen.generate_risk_comparison_narrative(
                     report=report,
                     current_data=risk_data,
-                    prev_year_data=prev_year_risk,
-                    prev_q_data=prev_q_risk,
-                    prev_q_label=prev_q_name_pb if prev_q_pb_data else "periode sebelumnya"
+                    prev_year_data=prev_year_yoy_risk,
+                    prev_q_data=prev_qoq_risk,
+                    prev_q_label=comp_ctx['qoq_prev_label']
                 )
                 st.markdown(f'<div class="narrative-box">{narrative_3_3}</div>', unsafe_allow_html=True)
+
+                # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 3.3) ==========
+                import pandas as pd
+                st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi Tingkat Risiko</b></div>', unsafe_allow_html=True)
+                
+                # Build DataFrame with monthly columns
+                table_data_risk = []
+                # Use standard risk order if present in data
+                risk_order = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
+                sorted_risk_items = []
+                
+                # First add present items in order
+                for r in risk_order:
+                    if r in risk_data:
+                        sorted_risk_items.append((r, risk_data[r]))
+                
+                # Add any others not in standard list ?? (Unlikely for Risk but good for safety)
+                for k, v in risk_data.items():
+                    if k not in risk_order:
+                        sorted_risk_items.append((k, v))
+
+                for idx, (risk_name, total_count) in enumerate(sorted_risk_items, 1):
+                    row = {'No': idx, 'Tingkat Risiko': risk_name}
+                    for month in months:
+                        m_data = pb_data.monthly_risk.get(month, {})
+                        row[month] = m_data.get(risk_name, 0)
+                    row['JUMLAH'] = total_count
+                    table_data_risk.append(row)
+                
+                risk_df = pd.DataFrame(table_data_risk)
+
+                # Display with Plotly Table
+                header_vals_risk = ['<b>NO</b>', '<b>TINGKAT RISIKO</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+                
+                cell_vals_risk = [
+                    risk_df['No'].tolist(),
+                    risk_df['Tingkat Risiko'].tolist()
+                ]
+                for m in months:
+                    cell_vals_risk.append(risk_df[m].tolist())
+                cell_vals_risk.append(risk_df['JUMLAH'].tolist())
+                
+                risk_table = go.Figure(data=[go.Table(
+                    header=dict(
+                        values=header_vals_risk,
+                        fill_color='#1E40AF',
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=12),
+                        height=40
+                    ),
+                    cells=dict(
+                        values=cell_vals_risk,
+                        fill_color=['#0F172A', '#1E293B'],
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=11),
+                        height=30,
+                        line_color='#334155'
+                    )
+                )])
+                
+                risk_table.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    height=min(400, len(table_data_risk) * 35 + 50),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                
+                st.plotly_chart(risk_table, use_container_width=True)
             else:
                 st.info("Data tingkat risiko tidak tersedia")
             
@@ -2797,17 +3002,33 @@ def render_report(report, stats: dict):
                         unsafe_allow_html=True)
             sector_data = pb_data.get_period_sector(months)
             if sector_data and sum(sector_data.values()) > 0:
-                import plotly.graph_objects as go
-                # Show ALL sectors, sorted
-                sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True))
+                import pandas as pd
+                # Create DataFrame
+                df_sector = pd.DataFrame(list(sector_data.items()), columns=['Sektor Kementerian/Lembaga', 'Jumlah Perizinan'])
                 
-                # Dynamic height based on number of sectors
-                num_sectors = len(sorted_sector)
-                chart_height = max(400, num_sectors * 30 + 100)
+                # Sort by Count Descending
+                df_sector = df_sector.sort_values(by='Jumlah Perizinan', ascending=False)
                 
-                fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
-                fig.update_layout(title='Perizinan per Sektor', template='plotly_dark', height=chart_height, yaxis={'categoryorder': 'total ascending'})
-                st.plotly_chart(fig, use_container_width=True)
+                # Create simple HTML table for clear visibility
+                html = '<table style="width:100%; border-collapse: collapse; color: white; background: transparent;">'
+                # Header
+                html += '<thead style="border-bottom: 2px solid #5cbddb;"><tr>'
+                for col in df_sector.columns:
+                    html += f'<th style="padding: 12px 8px; text-align: left; font-weight: bold;">{col}</th>'
+                html += '</tr></thead>'
+                # Body
+                html += '<tbody>'
+                for _, row in df_sector.iterrows():
+                    html += '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">'
+                    # Sector Name
+                    html += f'<td style="padding: 8px;">{row[0]}</td>'
+                    # Count (formatted)
+                    count_val = f"{row[1]:,.0f}".replace(",", ".")
+                    html += f'<td style="padding: 8px;">{count_val}</td>'
+                    html += '</tr>'
+                html += '</tbody></table>'
+                
+                st.markdown(html, unsafe_allow_html=True)
             else:
                 st.info("Data sektor kementerian/lembaga tidak tersedia atau kosong.")
             
@@ -2821,6 +3042,62 @@ def render_report(report, stats: dict):
                 fig = go.Figure(data=[go.Bar(x=list(sorted_jenis.values()), y=list(sorted_jenis.keys()), orientation='h', marker_color='#06B6D4')])
                 fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_dark', height=400, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig, use_container_width=True)
+
+                # ========== DATA TABLE WITH MONTHLY BREAKDOWN (SECTION 3.5) ==========
+                import pandas as pd
+                st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Rekapitulasi Jenis Perizinan</b></div>', unsafe_allow_html=True)
+                
+                # Build DataFrame with monthly columns
+                table_data_jenis = []
+                sorted_jenis_items = sorted(jenis_data.items(), key=lambda x: x[1], reverse=True)
+                
+                for idx, (jenis_name, total_count) in enumerate(sorted_jenis_items, 1):
+                    row = {'No': idx, 'Jenis Perizinan': jenis_name}
+                    for month in months:
+                        m_data = pb_data.monthly_jenis_perizinan.get(month, {})
+                        row[month] = m_data.get(jenis_name, 0)
+                    row['JUMLAH'] = total_count
+                    table_data_jenis.append(row)
+                
+                jenis_df = pd.DataFrame(table_data_jenis)
+
+                # Display with Plotly Table
+                header_vals_jenis = ['<b>NO</b>', '<b>JENIS PERIZINAN</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+                
+                cell_vals_jenis = [
+                    jenis_df['No'].tolist(),
+                    jenis_df['Jenis Perizinan'].tolist()
+                ]
+                for m in months:
+                    cell_vals_jenis.append(jenis_df[m].tolist())
+                cell_vals_jenis.append(jenis_df['JUMLAH'].tolist())
+                
+                jenis_table = go.Figure(data=[go.Table(
+                    header=dict(
+                        values=header_vals_jenis,
+                        fill_color='#1E40AF',
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=12),
+                        height=40
+                    ),
+                    cells=dict(
+                        values=cell_vals_jenis,
+                        fill_color=['#0F172A', '#1E293B'],
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=11),
+                        height=30,
+                        line_color='#334155'
+                    )
+                )])
+                
+                jenis_table.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    height=min(400, len(table_data_jenis) * 35 + 50),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                
+                st.plotly_chart(jenis_table, use_container_width=True)
             
             # 3.6 Status Perizinan (NO Gubernur filter - all data)
             st.markdown('<div class="section-title">3.6 Rekapitulasi Berdasarkan Status Respon</div>', 
@@ -2872,10 +3149,96 @@ def render_report(report, stats: dict):
                     
                     st.markdown(f'<div class="narrative-box" style="margin-top: 1rem;">{narrative}</div>', unsafe_allow_html=True)
             
-            # 3.7 Kewenangan (NO Gubernur filter - all data, grouped by DPMPTSP)
+                # ========== DATA TABLE WITH MONTHLY BREAKDOWN ==========
+                import pandas as pd
+                st.markdown(f'<div style="background: linear-gradient(90deg, #1E3A5F, #3B82F6); padding: 10px; border-radius: 8px 8px 0 0; margin-top: 1rem;"><b style="color: white;">📊 Tabel Detail Status Respon</b></div>', unsafe_allow_html=True)
+                
+                # Build DataFrame with monthly columns
+                # status_data is already aggregated, but we need monthly splits
+                table_data_status = []
+                sorted_status_items = sorted(status_data.items(), key=lambda x: x[1], reverse=True)
+                
+                # Fetch detailed monthly data from pb_data directly
+                # Structure: pb_data.monthly_status_perizinan [Month][Status] -> Count
+                
+                for idx, (status_name, total_count) in enumerate(sorted_status_items, 1):
+                    row = {'No': idx, 'Status Respon': status_name}
+                    for month in months:
+                        m_data = pb_data.monthly_status_perizinan.get(month, {})
+                        row[month] = m_data.get(status_name, 0)
+                    row['JUMLAH'] = total_count
+                    table_data_status.append(row)
+                
+                status_df = pd.DataFrame(table_data_status)
+
+                # Display with Plotly Table
+                header_vals_status = ['<b>NO</b>', '<b>STATUS RESPON</b>'] + [f'<b>{m.upper()}</b>' for m in months] + ['<b>JUMLAH</b>']
+                
+                cell_vals_status = [
+                    status_df['No'].tolist(),
+                    status_df['Status Respon'].tolist()
+                ]
+                for m in months:
+                    cell_vals_status.append(status_df[m].tolist())
+                cell_vals_status.append(status_df['JUMLAH'].tolist())
+                
+                status_table = go.Figure(data=[go.Table(
+                    header=dict(
+                        values=header_vals_status,
+                        fill_color='#1E40AF',
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=12),
+                        height=40
+                    ),
+                    cells=dict(
+                        values=cell_vals_status,
+                        fill_color=['#0F172A', '#1E293B'],
+                        align=['center', 'left'] + ['center'] * (len(months) + 1),
+                        font=dict(color='white', size=11),
+                        height=30,
+                        line_color='#334155'
+                    )
+                )])
+                
+                status_table.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    height=min(400, len(table_data_status) * 35 + 50),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                
+                st.plotly_chart(status_table, use_container_width=True)
+            
+            # 3.7 Kewenangan (Filtered for Lampung Specific + Whitelist)
             st.markdown('<div class="section-title">3.7 Rekapitulasi Berdasarkan Kewenangan</div>', 
                         unsafe_allow_html=True)
-            kew_data = pb_data.get_period_kewenangan(months)
+            raw_kew_data = pb_data.get_period_kewenangan(months)
+            
+            # 1. Normalization Step: Remove "Kab." and merge duplicates
+            normalized_kew_data = {}
+            if raw_kew_data:
+                for k, v in raw_kew_data.items():
+                    # Remove "Kab." and clean up extra spaces
+                    norm_k = k.replace("Kab.", "").replace("  ", " ").strip()
+                    normalized_kew_data[norm_k] = normalized_kew_data.get(norm_k, 0) + v
+            
+            # 2. Filtering Logic
+            target_regions = [
+                "Tanggamus", "Way Kanan", "Tulang Bawang", "Pesawaran",
+                "Pringsewu", "Mesuji", "Tulang Bawang Barat", "Pesisir Barat", "Metro"
+            ]
+            
+            kew_data = {}
+            if normalized_kew_data:
+                for k, v in normalized_kew_data.items():
+                    k_lower = k.lower()
+                    # Condition 1: Contains 'lampung'
+                    if "lampung" in k_lower:
+                        kew_data[k] = v
+                    # Condition 2: In whitelist
+                    elif any(region.lower() in k_lower for region in target_regions):
+                         kew_data[k] = v
+            
             if kew_data:
                 import plotly.graph_objects as go
                 import pandas as pd
@@ -3100,34 +3463,7 @@ def generate_pdf(report, stats) -> bytes:
     )
     charts['pelaku'] = fig.to_image(format='png', scale=2)
     
-    # Risk and Sector charts (if data available)
-    sektor_risiko = stats.get('sektor_risiko', {})
-    if sektor_risiko:
-        # Risk donut chart
-        fig = chart_gen.create_risk_donut_chart(
-            rendah=sektor_risiko.get('risiko_rendah', 0),
-            menengah_rendah=sektor_risiko.get('risiko_menengah_rendah', 0),
-            menengah_tinggi=sektor_risiko.get('risiko_menengah_tinggi', 0),
-            tinggi=sektor_risiko.get('risiko_tinggi', 0)
-        )
-        charts['risk'] = fig.to_image(format='png', scale=2)
-        
-        # Sector distribution chart
-        sector_data = {
-            'Energi': sektor_risiko.get('sektor_energi', 0),
-            'Kelautan': sektor_risiko.get('sektor_kelautan', 0),
-            'Kesehatan': sektor_risiko.get('sektor_kesehatan', 0),
-            'Komunikasi': sektor_risiko.get('sektor_komunikasi', 0),
-            'Pariwisata': sektor_risiko.get('sektor_pariwisata', 0),
-            'Perhubungan': sektor_risiko.get('sektor_perhubungan', 0),
-            'Perindustrian': sektor_risiko.get('sektor_perindustrian', 0),
-            'Pertanian': sektor_risiko.get('sektor_pertanian', 0),
-        }
-        # Filter zeros
-        sector_data = {k: v for k, v in sector_data.items() if v > 0}
-        if sector_data:
-            fig = chart_gen.create_sector_distribution_chart(sector_data)
-            charts['sector'] = fig.to_image(format='png', scale=2)
+
     
     # Create PDF exporter
     exporter = PDFExporter(logo_path=LOGO_PATH)
@@ -3151,6 +3487,7 @@ def generate_word(report, stats) -> bytes:
     # Generate chart images
     charts = {}
     
+    # ============== SECTION 1: NIB ==============
     # Monthly chart
     monthly_data = stats.get('monthly_totals', {})
     if monthly_data:
@@ -3179,35 +3516,95 @@ def generate_word(report, stats) -> bytes:
     )
     charts['pelaku'] = fig.to_image(format='png', scale=2)
     
-    # Risk and Sector charts (if data available)
+    # Risk chart (Section 1.5)
     sektor_risiko = stats.get('sektor_risiko', {})
     if sektor_risiko:
-        # Risk donut chart
-        fig = chart_gen.create_risk_donut_chart(
-            rendah=sektor_risiko.get('risiko_rendah', 0),
-            menengah_rendah=sektor_risiko.get('risiko_menengah_rendah', 0),
-            menengah_tinggi=sektor_risiko.get('risiko_menengah_tinggi', 0),
-            tinggi=sektor_risiko.get('risiko_tinggi', 0)
-        )
-        charts['risk'] = fig.to_image(format='png', scale=2)
-        
-        # Sector distribution chart
-        sector_data = {
-            'Energi': sektor_risiko.get('sektor_energi', 0),
-            'Kelautan': sektor_risiko.get('sektor_kelautan', 0),
-            'Kesehatan': sektor_risiko.get('sektor_kesehatan', 0),
-            'Komunikasi': sektor_risiko.get('sektor_komunikasi', 0),
-            'Pariwisata': sektor_risiko.get('sektor_pariwisata', 0),
-            'Perhubungan': sektor_risiko.get('sektor_perhubungan', 0),
-            'Perindustrian': sektor_risiko.get('sektor_perindustrian', 0),
-            'Pertanian': sektor_risiko.get('sektor_pertanian', 0),
+        risk_data = {
+            'Rendah': sektor_risiko.get('risiko_rendah', 0),
+            'Menengah Rendah': sektor_risiko.get('risiko_menengah_rendah', 0),
+            'Menengah Tinggi': sektor_risiko.get('risiko_menengah_tinggi', 0),
+            'Tinggi': sektor_risiko.get('risiko_tinggi', 0)
         }
-        # Filter zeros
-        sector_data = {k: v for k, v in sector_data.items() if v > 0}
-        if sector_data:
-            fig = chart_gen.create_sector_distribution_chart(sector_data)
-            charts['sector'] = fig.to_image(format='png', scale=2)
+        if sum(risk_data.values()) > 0:
+            fig = chart_gen.create_simple_bar_chart(
+                labels=list(risk_data.keys()),
+                values=list(risk_data.values()),
+                title="Distribusi Perizinan per Risiko",
+                color='#E74C3C'
+            )
+            charts['risk'] = fig.to_image(format='png', scale=2)
     
+    # ============== SECTION 2: PROYEK/INVESTASI ==============
+    proyek_data = st.session_state.get('current_proyek_data')
+    if proyek_data:
+        from app.data.reference_loader import ReferenceDataLoader
+        loader = ReferenceDataLoader()
+        months = loader.get_months_for_period(report.period_type, report.period_name)
+        
+        # 2.1 PMA/PMDN Proyek chart
+        pma_projects = proyek_data.get_period_pma_projects(months)
+        pmdn_projects = proyek_data.get_period_pmdn_projects(months)
+        if pma_projects > 0 or pmdn_projects > 0:
+            fig = chart_gen.create_pm_comparison_chart(
+                pma_total=pma_projects,
+                pmdn_total=pmdn_projects
+            )
+            charts['proyek_pm'] = fig.to_image(format='png', scale=2)
+        
+        # 2.3 Skala Usaha chart
+        skala_data = proyek_data.get_period_by_skala_usaha(months)
+        if skala_data:
+            std_keys = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
+            ordered_vals = [skala_data.get(k, 0) for k in std_keys]
+            import plotly.graph_objects as go
+            fig = go.Figure(data=[go.Bar(x=std_keys, y=ordered_vals, marker_color=['#3498db', '#e67e22', '#2ecc71', '#9b59b6'])])
+            fig.update_layout(title="Proyek Berdasarkan Skala Usaha", template='plotly_dark', height=400)
+            charts['skala_usaha'] = fig.to_image(format='png', scale=2)
+    
+    # ============== SECTION 3: PERIZINAN BERUSAHA (PB OSS) ==============
+    pb_data = st.session_state.get('current_pb_data')
+    if pb_data:
+        from app.data.reference_loader import ReferenceDataLoader
+        loader = ReferenceDataLoader()
+        months = loader.get_months_for_period(report.period_type, report.period_name)
+        
+        # 3.1 Kab/Kota PB chart
+        kab_data = pb_data.get_period_by_kab_kota(months)
+        if kab_data:
+            sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
+            import plotly.graph_objects as go
+            fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
+            fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_dark', height=450, yaxis={'categoryorder': 'total ascending'})
+            charts['pb_kab_kota'] = fig.to_image(format='png', scale=2)
+        
+        # 3.2 Status PM PB chart
+        pm_pb_data = pb_data.get_period_status_pm(months)
+        if pm_pb_data:
+            fig = chart_gen.create_pm_comparison_chart(
+                pma_total=pm_pb_data.get('PMA', 0),
+                pmdn_total=pm_pb_data.get('PMDN', 0)
+            )
+            charts['pb_pm'] = fig.to_image(format='png', scale=2)
+        
+        # 3.3 Risk Level PB chart
+        risk_pb_data = pb_data.get_period_risk(months)
+        if risk_pb_data:
+            risk_order = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
+            sorted_risk = {k: risk_pb_data.get(k, 0) for k in risk_order if k in risk_pb_data}
+            import plotly.graph_objects as go
+            fig = go.Figure(data=[go.Bar(x=list(sorted_risk.values()), y=list(sorted_risk.keys()), orientation='h', marker_color=['#10B981', '#FBBF24', '#F59E0B', '#EF4444'])])
+            fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_dark', height=400)
+            charts['pb_risk'] = fig.to_image(format='png', scale=2)
+        
+        # 3.4 Sector PB chart
+        sector_data = pb_data.get_period_sector(months)
+        if sector_data:
+            sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
+            import plotly.graph_objects as go
+            fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
+            fig.update_layout(title='Top 10 Sektor Perizinan', template='plotly_dark', height=450, yaxis={'categoryorder': 'total ascending'})
+            charts['pb_sector'] = fig.to_image(format='png', scale=2)
+
     # Create Word exporter
     exporter = WordExporter(logo_path=LOGO_PATH)
     

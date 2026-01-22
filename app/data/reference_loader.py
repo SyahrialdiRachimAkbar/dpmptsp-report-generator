@@ -608,7 +608,7 @@ class ReferenceDataLoader:
             # Find relevant columns
             date_col = self._find_column(df, ['day of tgl_izin', 'tanggal', 'tgl', 'date'])
             risk_col = self._find_column(df, ['risiko', 'risk', 'kd_resiko', 'uraian risiko'])
-            sector_col = self._find_column(df, ['sektor', 'sector', 'kbli', 'judul_kbli'])
+            sector_col = self._find_column(df, ['sektor', 'sector', 'judul_kbli', 'uraian_sektor'])
             
             if year is None:
                 year = self.extract_year_from_filename(filename) or datetime.now().year
@@ -824,10 +824,22 @@ class ReferenceDataLoader:
                     # 1. Prepare Calculation DataFrame
                     if id_col:
                         # Keep one row per (Wilayah, ProjectID) to avoid double counting labor
-                        # This works globally instead of looping per district
                         calc_df = month_df.drop_duplicates(subset=[wilayah_col, id_col])
                     else:
-                        calc_df = month_df
+                        # Fallback: Deduplicate by Name + Inv + Location if no ID found
+                        # This handles cases where one project has multiple KBLI rows but same Labor stats
+                        dedup_cols = [wilayah_col]
+                        
+                        # Add Company Name to logic if found
+                        name_col = self._find_column(df, ['nama_perusahaan', 'nama perusahaan', 'nama_perseroan', 'pelaku_usaha'])
+                        if name_col:
+                            dedup_cols.append(name_col)
+                        
+                        # Add Investment to logic (projects usually have distinct inv values, or at least same project = same inv)
+                        if investment_col:
+                            dedup_cols.append(investment_col)
+                            
+                        calc_df = month_df.drop_duplicates(subset=dedup_cols)
                     
                     # 2. GroupBy and Sum (High Performance)
                     cols_to_sum = []

@@ -153,6 +153,44 @@ class WordExporter:
             sektor_narrative = self._generate_sektor_risiko_narrative(sektor_risiko)
             self._add_paragraph(doc, sektor_narrative)
         
+        # ============== SECTION 2: INVESTASI/PROYEK ==============
+        doc.add_page_break()
+        self._add_section_title(doc, "2. Rekapitulasi Data Investasi dan Proyek")
+        
+        # 2.1 PMA/PMDN Proyek
+        if 'proyek_pm' in charts:
+            self._add_subsection_title(doc, "2.1 Distribusi Proyek PMA/PMDN")
+            self._add_chart_image(doc, charts['proyek_pm'], width=4)
+        
+        # 2.3 Skala Usaha
+        if 'skala_usaha' in charts:
+            self._add_subsection_title(doc, "2.3 Proyek Berdasarkan Skala Usaha")
+            self._add_chart_image(doc, charts['skala_usaha'], width=5)
+        
+        # ============== SECTION 3: PERIZINAN BERUSAHA ==============
+        doc.add_page_break()
+        self._add_section_title(doc, "3. Perizinan Berusaha Berbasis Risiko")
+        
+        # 3.1 Kab/Kota PB
+        if 'pb_kab_kota' in charts:
+            self._add_subsection_title(doc, "3.1 Perizinan per Kabupaten/Kota")
+            self._add_chart_image(doc, charts['pb_kab_kota'], width=5)
+        
+        # 3.2 Status PM PB
+        if 'pb_pm' in charts:
+            self._add_subsection_title(doc, "3.2 Perizinan Berdasarkan Status PM")
+            self._add_chart_image(doc, charts['pb_pm'], width=4)
+        
+        # 3.3 Risk Level PB
+        if 'pb_risk' in charts:
+            self._add_subsection_title(doc, "3.3 Perizinan Berdasarkan Tingkat Risiko")
+            self._add_chart_image(doc, charts['pb_risk'], width=5)
+        
+        # 3.4 Sector PB
+        if 'pb_sector' in charts:
+            self._add_subsection_title(doc, "3.4 Top 10 Sektor Perizinan")
+            self._add_chart_image(doc, charts['pb_sector'], width=5)
+        
         # Section 7: Kesimpulan
         doc.add_page_break()
         self._add_section_title(doc, "Kesimpulan")

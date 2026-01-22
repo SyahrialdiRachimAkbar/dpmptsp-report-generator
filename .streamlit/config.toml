@@ -2,7 +2,7 @@
 primaryColor = "#4da6d9"
 backgroundColor = "#1a1d23"
 secondaryBackgroundColor = "#252a33"
-textColor = "#e8eaed"
+textColor = "#FFFFFF"
 font = "sans serif"
 
 [browser]
