@@ -107,6 +107,12 @@ class WordExporter:
         if 'monthly' in charts:
             self._add_chart_image(doc, charts['monthly'])
         
+        if 'monthly_yoy' in charts:
+            self._add_chart_image(doc, charts['monthly_yoy'], width=4)
+        
+        if 'monthly_qoq' in charts:
+            self._add_chart_image(doc, charts['monthly_qoq'], width=4)
+        
         self._add_paragraph(doc, narratives.rekapitulasi_nib)
         
         # Section 3: Per Kabupaten/Kota

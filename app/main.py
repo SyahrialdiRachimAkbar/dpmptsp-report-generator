@@ -3494,6 +3494,120 @@ def generate_word(report, stats) -> bytes:
         fig = chart_gen.create_monthly_bar_with_trendline(monthly_data, show_trendline=True)
         charts['monthly'] = fig.to_image(format='png', scale=2)
     
+    # --- Section 1.1 YoY/QoQ Charts ---
+    # Build comp_ctx for Word export (replicating UI logic)
+    TRIWULAN_KE_BULAN = {
+        "TW I": ['januari', 'februari', 'maret'],
+        "TW II": ['april', 'mei', 'juni'],
+        "TW III": ['juli', 'agustus', 'september'],
+        "TW IV": ['oktober', 'november', 'desember'],
+    }
+    SEMESTER_KE_BULAN = {
+        "Semester I": TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"],
+        "Semester II": TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"],
+    }
+    
+    comp_ctx = {'has_prev_q_data': False}
+    
+    if report.period_type == "Triwulan":
+        comp_ctx['main_target_months'] = TRIWULAN_KE_BULAN.get(report.period_name, [])
+        comp_ctx['yoy_curr_months'] = comp_ctx['main_target_months']
+        comp_ctx['yoy_prev_months'] = comp_ctx['main_target_months']
+        comp_ctx['yoy_curr_label'] = f"{report.period_name} {report.year}"
+        comp_ctx['yoy_prev_label'] = f"{report.period_name} {report.year - 1}"
+        
+        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
+        try:
+            curr_idx = tw_list.index(report.period_name)
+            comp_ctx['qoq_curr_months'] = comp_ctx['main_target_months']
+            comp_ctx['qoq_curr_label'] = f"{report.period_name} {report.year}"
+            if curr_idx > 0:
+                prev_q_name = tw_list[curr_idx - 1]
+                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
+                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year}"
+            else:
+                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
+                comp_ctx['qoq_prev_label'] = f"TW IV {report.year - 1}"
+        except: pass
+        
+    elif report.period_type == "Semester":
+        comp_ctx['main_target_months'] = SEMESTER_KE_BULAN.get(report.period_name, [])
+        if report.period_name == "Semester I":
+            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['yoy_curr_label'] = f"TW II {report.year}"
+            comp_ctx['yoy_prev_label'] = f"TW II {report.year - 1}"
+            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
+            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW I"]
+            comp_ctx['qoq_curr_label'] = f"TW II {report.year}"
+            comp_ctx['qoq_prev_label'] = f"TW I {report.year}"
+        else:
+            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['yoy_curr_label'] = f"TW IV {report.year}"
+            comp_ctx['yoy_prev_label'] = f"TW IV {report.year - 1}"
+            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
+            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW III"]
+            comp_ctx['qoq_curr_label'] = f"TW IV {report.year}"
+            comp_ctx['qoq_prev_label'] = f"TW III {report.year}"
+            
+    elif report.period_type == "Tahunan":
+        comp_ctx['main_target_months'] = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
+        comp_ctx['yoy_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['yoy_prev_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['yoy_curr_label'] = f"Semester II {report.year}"
+        comp_ctx['yoy_prev_label'] = f"Semester II {report.year - 1}"
+        comp_ctx['qoq_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
+        comp_ctx['qoq_prev_months'] = SEMESTER_KE_BULAN["Semester I"]
+        comp_ctx['qoq_curr_label'] = f"Semester II {report.year}"
+        comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
+    
+    # Get current/prev full data for Section 1.1 comparisons
+    current_full_data = st.session_state.get('current_full_nib_data')
+    prev_full_data = st.session_state.get('prev_full_nib_data')
+    
+    # Calculate NIB totals for comparisons
+    current_yoy_val = 0
+    prev_year_yoy_val = 0
+    current_qoq_val = 0
+    prev_qoq_val = 0
+    
+    if current_full_data and hasattr(current_full_data, 'monthly_totals'):
+        current_yoy_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('yoy_curr_months', []))
+        current_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_curr_months', []))
+        prev_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_prev_months', []))
+        comp_ctx['has_prev_q_data'] = True
+        
+    if prev_full_data and hasattr(prev_full_data, 'monthly_totals'):
+        prev_year_yoy_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('yoy_prev_months', []))
+        # For TW I, QoQ prev comes from prev year
+        if report.period_type == "Triwulan" and report.period_name == "TW I":
+            prev_qoq_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_prev_months', []))
+    
+    # Generate Section 1.1 YoY chart
+    if prev_year_yoy_val > 0:
+        yoy_title = f"JUMLAH NIB (y-o-y)\n{comp_ctx.get('yoy_prev_label', '')} vs {comp_ctx.get('yoy_curr_label', '')}"
+        fig_yoy = chart_gen.create_qoq_comparison_bar(
+            current_data={comp_ctx.get('yoy_curr_label', ''): current_yoy_val},
+            previous_data={comp_ctx.get('yoy_prev_label', ''): prev_year_yoy_val},
+            current_label=comp_ctx.get('yoy_curr_label', ''),
+            previous_label=comp_ctx.get('yoy_prev_label', ''),
+            title=yoy_title
+        )
+        charts['monthly_yoy'] = fig_yoy.to_image(format='png', scale=2)
+    
+    # Generate Section 1.1 QoQ chart
+    if comp_ctx.get('has_prev_q_data') and prev_qoq_val > 0:
+        qoq_title = f"JUMLAH NIB (q-o-q)\n{comp_ctx.get('qoq_prev_label', '')} vs {comp_ctx.get('qoq_curr_label', '')}"
+        fig_qoq = chart_gen.create_qoq_comparison_bar(
+            current_data={comp_ctx.get('qoq_curr_label', ''): current_qoq_val},
+            previous_data={comp_ctx.get('qoq_prev_label', ''): prev_qoq_val},
+            current_label=comp_ctx.get('qoq_curr_label', ''),
+            previous_label=comp_ctx.get('qoq_prev_label', ''),
+            title=qoq_title
+        )
+        charts['monthly_qoq'] = fig_qoq.to_image(format='png', scale=2)
+    
     # Kab/Kota chart
     df = st.session_state.aggregator.to_dataframe(report)
     if not df.empty:
