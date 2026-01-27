@@ -3563,8 +3563,27 @@ def generate_word(report, stats) -> bytes:
         comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
     
     # Get current/prev full data for Section 1.1 comparisons
+    # Try session state first, then fall back to loading from uploaded files
+    from app.data.reference_loader import ReferenceDataLoader
+    ref_loader = ReferenceDataLoader()
+    
     current_full_data = st.session_state.get('current_nib_data')
+    if current_full_data is None:
+        current_nib_file = st.session_state.get('nib_ref_file')
+        if current_nib_file:
+            try:
+                current_full_data = ref_loader.load_nib(current_nib_file.getvalue(), current_nib_file.name)
+            except Exception:
+                pass
+    
     prev_full_data = st.session_state.get('prev_nib_data')
+    if prev_full_data is None:
+        prev_nib_file = st.session_state.get('nib_prev_ref_file')
+        if prev_nib_file:
+            try:
+                prev_full_data = ref_loader.load_nib(prev_nib_file.getvalue(), prev_nib_file.name)
+            except Exception:
+                pass
     
     # Calculate NIB totals for comparisons
     current_yoy_val = 0
