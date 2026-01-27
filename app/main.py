@@ -3563,8 +3563,8 @@ def generate_word(report, stats) -> bytes:
         comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
     
     # Get current/prev full data for Section 1.1 comparisons
-    current_full_data = st.session_state.get('current_full_nib_data')
-    prev_full_data = st.session_state.get('prev_full_nib_data')
+    current_full_data = st.session_state.get('current_nib_data')
+    prev_full_data = st.session_state.get('prev_nib_data')
     
     # Calculate NIB totals for comparisons
     current_yoy_val = 0
