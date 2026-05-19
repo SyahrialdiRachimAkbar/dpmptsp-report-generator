@@ -3,7 +3,6 @@ import unittest
 from app.config import NAMA_BULAN, TRIWULAN_KE_BULAN
 from app.reporting import (
     build_comparison_context,
-    PERIOD_KE_BULAN,
     resolve_reference_data,
     sum_month_values,
     validate_report_inputs,
@@ -33,12 +32,12 @@ class ReportingHelperTests(unittest.TestCase):
         tahunan = build_comparison_context("Tahunan", "2025", 2025)
 
         self.assertEqual(semester["main_target_months"], TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"])
-        self.assertEqual(PERIOD_KE_BULAN["Semester I"], semester["main_target_months"])
-        self.assertEqual(PERIOD_KE_BULAN["Semester II"], TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"])
         self.assertEqual(semester["qoq_curr_label"], "TW II 2025")
         self.assertEqual(semester["qoq_prev_label"], "TW I 2025")
+        self.assertEqual(semester["qoq_prev_months"], TRIWULAN_KE_BULAN["TW I"])
         self.assertEqual(tahunan["main_target_months"], NAMA_BULAN)
         self.assertEqual(tahunan["yoy_curr_label"], "Semester II 2025")
+        self.assertEqual(tahunan["qoq_prev_months"], TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"])
 
     def test_nib_month_sum_does_not_regress_to_lowercase_keys(self):
         context = build_comparison_context("Triwulan", "TW III", 2025)

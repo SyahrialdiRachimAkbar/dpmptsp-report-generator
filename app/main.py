@@ -27,7 +27,6 @@ from app.narrative.generator import NarrativeGenerator
 from app.config import LOGO_PATH, TRIWULAN_KE_BULAN, NAMA_BULAN
 from app.reporting import (
     build_comparison_context,
-    PERIOD_KE_BULAN,
     report_to_dataframe,
     resolve_reference_data,
     sum_month_values,
@@ -2215,8 +2214,9 @@ def render_report(report, stats: dict):
                         st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
                 
                 with col_qoq:
-                    if prev_q_source_data and prev_q_name_str and prev_q_name_str in PERIOD_KE_BULAN:
-                        pq_months = PERIOD_KE_BULAN[prev_q_name_str]
+                    qoq_prev_months = comp_ctx["qoq_prev_months"]
+                    if prev_q_source_data and qoq_prev_months:
+                        pq_months = qoq_prev_months
                         pq_skala_data = prev_q_source_data.get_period_by_skala_usaha(pq_months)
                         pq_vals = [pq_skala_data.get(k, 0) for k in std_keys]
                         
@@ -2231,7 +2231,7 @@ def render_report(report, stats: dict):
                             current_values=qoq_curr_vals,
                             prev_values=pq_vals,
                             current_label=comp_ctx['qoq_curr_label'],
-                            prev_label=prev_q_name_str,
+                            prev_label=comp_ctx['qoq_prev_label'],
                             title="Jumlah Proyek (q-o-q)",
                             y_axis_title="Jumlah"
                         )

@@ -12,11 +12,6 @@ SEMESTER_KE_BULAN = {
     "Semester II": TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"],
 }
 
-PERIOD_KE_BULAN = {
-    **TRIWULAN_KE_BULAN,
-    **SEMESTER_KE_BULAN,
-}
-
 
 def build_comparison_context(period_type: str, period_name: str, year: int) -> Dict[str, Any]:
     """Build canonical month ranges and labels for YoY/QoQ comparisons."""
