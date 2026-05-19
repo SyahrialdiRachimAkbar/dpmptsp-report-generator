@@ -27,6 +27,7 @@ from app.narrative.generator import NarrativeGenerator
 from app.config import LOGO_PATH, TRIWULAN_KE_BULAN, NAMA_BULAN
 from app.reporting import (
     build_comparison_context,
+    PERIOD_KE_BULAN,
     report_to_dataframe,
     resolve_reference_data,
     sum_month_values,
@@ -2214,11 +2215,8 @@ def render_report(report, stats: dict):
                         st.info("Upload file proyek tahun sebelumnya untuk Y-o-Y")
                 
                 with col_qoq:
-                    # Combined lookup for flexibility
-                    combined_period_map = {**TRIWULAN_KE_BULAN, **SEMESTER_KE_BULAN}
-                    
-                    if prev_q_source_data and prev_q_name_str and prev_q_name_str in combined_period_map:
-                        pq_months = combined_period_map[prev_q_name_str]
+                    if prev_q_source_data and prev_q_name_str and prev_q_name_str in PERIOD_KE_BULAN:
+                        pq_months = PERIOD_KE_BULAN[prev_q_name_str]
                         pq_skala_data = prev_q_source_data.get_period_by_skala_usaha(pq_months)
                         pq_vals = [pq_skala_data.get(k, 0) for k in std_keys]
                         
