@@ -2992,12 +2992,12 @@ def render_report(report, stats: dict):
                 html += '</tr></thead>'
                 # Body
                 html += '<tbody>'
-                for _, row in df_sector.iterrows():
+                for sector_name, permit_count in df_sector.itertuples(index=False, name=None):
                     html += '<tr style="border-bottom: 1px solid #e2e8f0;">'
                     # Sector Name
-                    html += f'<td style="padding: 8px;">{row[0]}</td>'
+                    html += f'<td style="padding: 8px;">{sector_name}</td>'
                     # Count (formatted)
-                    count_val = f"{row[1]:,.0f}".replace(",", ".")
+                    count_val = f"{permit_count:,.0f}".replace(",", ".")
                     html += f'<td style="padding: 8px;">{count_val}</td>'
                     html += '</tr>'
                 html += '</tbody></table>'
