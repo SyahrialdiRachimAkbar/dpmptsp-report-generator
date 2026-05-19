@@ -40,6 +40,7 @@ DATA OSS 2025/
 *.csv
 
 # Temporary files
+.cache/
 *.tmp
 *.temp
 temp_*

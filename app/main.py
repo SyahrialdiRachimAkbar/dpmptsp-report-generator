@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.data.loader import DataLoader, InvestmentReport, InvestmentData, TWSummary
 from app.data.aggregator import DataAggregator, PeriodReport, AggregatedNIBData
 from app.data.reference_loader import ReferenceDataLoader
+from app.cache import load_or_build
 from app.visualization.charts import ChartGenerator
 from app.narrative.generator import NarrativeGenerator
 from app.config import LOGO_PATH, TRIWULAN_KE_BULAN, NAMA_BULAN
@@ -874,24 +875,60 @@ def render_sidebar():
 
 @st.cache_data(show_spinner=False)
 def _cached_load_nib(file_content: bytes, filename: str, year: int):
-    """Cached NIB loader - only reloads when file content changes."""
+    """Cached NIB loader - persists parsed summaries across app restarts."""
     from io import BytesIO
-    loader = ReferenceDataLoader()
-    return loader.load_nib(BytesIO(file_content), filename, year)
+
+    def build(content: bytes, name: str, selected_year: int):
+        loader = ReferenceDataLoader()
+        return loader.load_nib(BytesIO(content), name, selected_year)
+
+    result = load_or_build("nib", file_content, filename, year, build)
+    if result.data is not None:
+        result.data._cache_status = result.status
+        result.data._load_seconds = result.elapsed_seconds
+    print(f"NIB {filename} loaded via {result.status} in {result.elapsed_seconds:.2f}s")
+    return result.data
 
 @st.cache_data(show_spinner=False)
 def _cached_load_pb_oss(file_content: bytes, filename: str, year: int):
-    """Cached PB OSS loader - only reloads when file content changes."""
+    """Cached PB OSS loader - persists parsed summaries across app restarts."""
     from io import BytesIO
-    loader = ReferenceDataLoader()
-    return loader.load_pb_oss(BytesIO(file_content), filename, year)
+
+    def build(content: bytes, name: str, selected_year: int):
+        loader = ReferenceDataLoader()
+        return loader.load_pb_oss(BytesIO(content), name, selected_year)
+
+    result = load_or_build("pb_oss", file_content, filename, year, build)
+    if result.data is not None:
+        result.data._cache_status = result.status
+        result.data._load_seconds = result.elapsed_seconds
+    print(f"PB OSS {filename} loaded via {result.status} in {result.elapsed_seconds:.2f}s")
+    return result.data
 
 @st.cache_data(show_spinner=False)
 def _cached_load_proyek(file_content: bytes, filename: str, year: int):
-    """Cached PROYEK loader - only reloads when file content changes."""
+    """Cached PROYEK loader - persists parsed summaries across app restarts."""
     from io import BytesIO
-    loader = ReferenceDataLoader()
-    return loader.load_proyek(BytesIO(file_content), filename, year)
+
+    def build(content: bytes, name: str, selected_year: int):
+        loader = ReferenceDataLoader()
+        return loader.load_proyek(BytesIO(content), name, selected_year)
+
+    result = load_or_build("proyek", file_content, filename, year, build)
+    if result.data is not None:
+        result.data._cache_status = result.status
+        result.data._load_seconds = result.elapsed_seconds
+    print(f"PROYEK {filename} loaded via {result.status} in {result.elapsed_seconds:.2f}s")
+    return result.data
+
+
+def _show_load_status(label: str, data):
+    """Show lightweight load timing feedback when available."""
+    status = getattr(data, "_cache_status", None)
+    seconds = getattr(data, "_load_seconds", None)
+    if status and seconds is not None:
+        source = "cache lokal" if status == "cache" else "parse Excel"
+        st.caption(f"{label}: {source} ({seconds:.2f}s)")
 
 
 def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
@@ -920,11 +957,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
             # Use cached loader for performance
             nib_data = _cached_load_nib(nib_file.getvalue(), nib_file.name, tahun)
             st.session_state.current_nib_data = nib_data
+            _show_load_status("NIB", nib_data)
             
             # Pre-load previous year NIB if available
             nib_prev_file = st.session_state.get('nib_prev_ref_file')
             if nib_prev_file:
                  st.session_state.prev_nib_data = _cached_load_nib(nib_prev_file.getvalue(), nib_prev_file.name, tahun - 1)
+                 _show_load_status("NIB tahun sebelumnya", st.session_state.prev_nib_data)
             
             if nib_data:
                 # Create PeriodReport structure manually
@@ -1004,11 +1043,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
             # Use cached loader for performance
             pb_data = _cached_load_pb_oss(pb_file.getvalue(), pb_file.name, tahun)
             st.session_state.current_pb_data = pb_data
+            _show_load_status("PB OSS", pb_data)
 
             # Pre-load previous year PB OSS if available
             pb_prev_file = st.session_state.get('pb_oss_prev_ref_file')
             if pb_prev_file:
                  st.session_state.prev_pb_data = _cached_load_pb_oss(pb_prev_file.getvalue(), pb_prev_file.name, tahun - 1)
+                 _show_load_status("PB OSS tahun sebelumnya", st.session_state.prev_pb_data)
             
             
             if pb_data:
@@ -1043,11 +1084,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
             # Use cached loader for performance
             proyek_data = _cached_load_proyek(proyek_file.getvalue(), proyek_file.name, tahun)
             st.session_state.current_proyek_data = proyek_data
+            _show_load_status("PROYEK", proyek_data)
             
             # Pre-load previous year Proyek if available
             proyek_prev_file = st.session_state.get('proyek_prev_ref_file')
             if proyek_prev_file:
                 st.session_state.prev_proyek_data = _cached_load_proyek(proyek_prev_file.getvalue(), proyek_prev_file.name, tahun - 1)
+                _show_load_status("PROYEK tahun sebelumnya", st.session_state.prev_proyek_data)
             
             
             if proyek_data:

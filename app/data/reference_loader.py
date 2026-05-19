@@ -14,6 +14,7 @@ Key Business Rules:
 
 import pandas as pd
 import re
+import math
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -269,6 +270,11 @@ class ReferenceDataLoader:
         5: "Mei", 6: "Juni", 7: "Juli", 8: "Agustus",
         9: "September", 10: "Oktober", 11: "November", 12: "Desember"
     }
+    INDO_MONTHS = {
+        'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4,
+        'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8,
+        'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
+    }
     
     # Risk level mapping
     RISK_MAP = {
@@ -355,13 +361,7 @@ class ReferenceDataLoader:
                 
                 # Try handling Indonesian month names manually
                 # Map Indo month -> English month for parsing, or direct to index
-                indo_months = {
-                    'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4,
-                    'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8,
-                    'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
-                }
-                
-                for indo, idx in indo_months.items():
+                for indo, idx in self.INDO_MONTHS.items():
                     if indo in date_str:
                         return self.MONTH_MAP.get(idx)
                 
@@ -384,8 +384,13 @@ class ReferenceDataLoader:
         
         try:
             # If standard datetime object
-            if isinstance(date_val, datetime):
+            if isinstance(date_val, (datetime, pd.Timestamp)):
                 return date_val
+
+            if isinstance(date_val, (int, float)) and not math.isnan(float(date_val)):
+                parsed = pd.to_datetime(date_val, unit='D', origin='1899-12-30', errors='coerce')
+                if not pd.isna(parsed):
+                    return parsed.to_pydatetime()
             
             # If string
             if isinstance(date_val, str):
@@ -399,14 +404,8 @@ class ReferenceDataLoader:
                     pass
                 
                 # Check for Indonesian month names manually
-                indo_months = {
-                    'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4,
-                    'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8,
-                    'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
-                }
-                
                 # Check if string contains any Indo month
-                for indo, idx in indo_months.items():
+                for indo, idx in self.INDO_MONTHS.items():
                     if indo.lower() in date_str.lower():
                         # Try to replace indo month with english or parse manually
                         # Simple regex to extract Day and Year if format is "DD Month YYYY"
@@ -427,6 +426,65 @@ class ReferenceDataLoader:
             return None
         except Exception:
             return None
+
+    def _parse_date_series(self, series: pd.Series) -> pd.Series:
+        """Parse a date Series with vectorized pandas parsing plus Indonesian fallback."""
+        if pd.api.types.is_datetime64_any_dtype(series):
+            return pd.to_datetime(series, errors='coerce')
+
+        parsed = pd.Series(pd.NaT, index=series.index, dtype='datetime64[ns]')
+        numeric_values = pd.to_numeric(series, errors='coerce')
+        numeric_mask = series.map(lambda value: isinstance(value, (int, float)) and not isinstance(value, bool)) & numeric_values.notna()
+        if numeric_mask.any():
+            parsed.loc[numeric_mask] = pd.to_datetime(
+                numeric_values.loc[numeric_mask],
+                unit='D',
+                origin='1899-12-30',
+                errors='coerce'
+            )
+
+        remaining = parsed.isna() & series.notna()
+        if remaining.any():
+            parsed.loc[remaining] = pd.to_datetime(series.loc[remaining], errors='coerce', dayfirst=False)
+
+        missing = parsed.isna() & series.notna()
+        if missing.any():
+            parsed.loc[missing] = series.loc[missing].apply(self._parse_date_obj)
+        return parsed
+
+    def _month_series(self, series: pd.Series) -> pd.Series:
+        """Convert a date Series to canonical Indonesian month names."""
+        parsed = self._parse_date_series(series)
+        return parsed.dt.month.map(self.MONTH_MAP)
+
+    def _assign_count_by_month(self, target: Dict[str, int], counts: pd.Series) -> None:
+        for month, count in counts.items():
+            if pd.notna(month):
+                target[month] = int(count)
+
+    def _assign_nested_month_counts(self, target: Dict[str, Dict[str, int]], counts: pd.Series, key_transform=None) -> None:
+        for key, month, count in counts.reset_index().itertuples(index=False, name=None):
+            if pd.isna(key) or pd.isna(month):
+                continue
+            key = key_transform(key) if key_transform else key
+            target.setdefault(key, {})[month] = int(count)
+
+    def _assign_month_nested_counts(self, target: Dict[str, Dict[str, int]], counts: pd.Series, value_transform=None, limit_per_month: Optional[int] = None) -> None:
+        frame = counts.reset_index(name='count')
+        if limit_per_month is not None and not frame.empty:
+            frame = frame.sort_values(['_month', 'count'], ascending=[True, False]).groupby('_month').head(limit_per_month)
+        for month, value, count in frame.itertuples(index=False, name=None):
+            if pd.isna(month) or pd.isna(value):
+                continue
+            value = value_transform(value) if value_transform else value
+            target.setdefault(month, {})[value] = int(count)
+
+    def _assign_three_level_counts(self, target: Dict[str, Dict[str, Dict[str, int]]], counts: pd.Series, third_transform=None) -> None:
+        for first, month, third, count in counts.reset_index().itertuples(index=False, name=None):
+            if pd.isna(first) or pd.isna(month) or pd.isna(third):
+                continue
+            third = third_transform(third) if third_transform else third
+            target.setdefault(first, {}).setdefault(month, {})[third] = int(count)
 
     def load_nib(self, file_bytes: BytesIO, filename: str, year: Optional[int] = None) -> Optional[NIBReferenceData]:
         """
@@ -479,73 +537,37 @@ class ReferenceDataLoader:
             if year is None:
                 year = self.extract_year_from_filename(filename) or datetime.now().year
             
-            # Parse dates to months
             if date_col:
-                df['_month'] = df[date_col].apply(self._parse_date_to_month)
+                df['_month'] = self._month_series(df[date_col])
+                df = df[df['_month'].isin(NAMA_BULAN)].copy()
             else:
-                df['_month'] = None
-            
-            # Initialize result
+                df['_month'] = 'Januari'
+
             result = NIBReferenceData(year=year)
-            
-            # Process per month
-            for month in NAMA_BULAN:
-                month_df = df[df['_month'] == month] if date_col else df
-                
-                if month_df.empty:
-                    continue
-                
-                # Count unique NIB per month
-                unique_nib = month_df[nib_col].dropna().nunique()
-                result.monthly_totals[month] = unique_nib
-                
-                # By Kab/Kota (unique NIB per kab per month)
-                if kab_col:
-                    kab_counts = month_df.groupby(kab_col)[nib_col].nunique()
-                    for kab, count in kab_counts.items():
-                        if kab not in result.by_kab_kota:
-                            result.by_kab_kota[kab] = {}
-                        result.by_kab_kota[kab][month] = count
-                
-                # By PM Status (unique NIB per PM per month)
-                if pm_col:
-                    pm_counts = month_df.groupby(pm_col)[nib_col].nunique()
-                    for pm, count in pm_counts.items():
-                        pm_key = str(pm).upper().strip()
-                        if pm_key not in result.by_pm_status:
-                            result.by_pm_status[pm_key] = {}
-                        result.by_pm_status[pm_key][month] = count
-                
-                # By Skala Usaha (unique NIB per skala per month)
-                if skala_col:
-                    skala_counts = month_df.groupby(skala_col)[nib_col].nunique()
-                    for skala, count in skala_counts.items():
-                        if skala not in result.by_skala_usaha:
-                            result.by_skala_usaha[skala] = {}
-                        result.by_skala_usaha[skala][month] = count
-                        
-                # Detailed breakdown for Kab/Kota x PM
-                if kab_col and pm_col:
-                    kab_pm = month_df.groupby([kab_col, pm_col])[nib_col].nunique()
-                    for (kab, pm), count in kab_pm.items():
-                        if kab not in result.kab_pm_monthly:
-                            result.kab_pm_monthly[kab] = {}
-                        if month not in result.kab_pm_monthly[kab]:
-                            result.kab_pm_monthly[kab][month] = {}
-                        
-                        pm_key = str(pm).upper().strip()
-                        result.kab_pm_monthly[kab][month][pm_key] = count
-                
-                # Detailed breakdown for Kab/Kota x Skala
-                if kab_col and skala_col:
-                    kab_skala = month_df.groupby([kab_col, skala_col])[nib_col].nunique()
-                    for (kab, skala), count in kab_skala.items():
-                        if kab not in result.kab_skala_monthly:
-                            result.kab_skala_monthly[kab] = {}
-                        if month not in result.kab_skala_monthly[kab]:
-                            result.kab_skala_monthly[kab][month] = {}
-                            
-                        result.kab_skala_monthly[kab][month][skala] = count
+
+            monthly_counts = df.groupby('_month')[nib_col].nunique()
+            self._assign_count_by_month(result.monthly_totals, monthly_counts)
+
+            if kab_col:
+                kab_counts = df.groupby([kab_col, '_month'])[nib_col].nunique()
+                self._assign_nested_month_counts(result.by_kab_kota, kab_counts)
+
+            if pm_col:
+                df['_pm_status'] = df[pm_col].astype(str).str.upper().str.strip()
+                pm_counts = df.groupby(['_pm_status', '_month'])[nib_col].nunique()
+                self._assign_nested_month_counts(result.by_pm_status, pm_counts)
+
+            if skala_col:
+                skala_counts = df.groupby([skala_col, '_month'])[nib_col].nunique()
+                self._assign_nested_month_counts(result.by_skala_usaha, skala_counts)
+
+            if kab_col and pm_col:
+                kab_pm = df.groupby([kab_col, '_month', '_pm_status'])[nib_col].nunique()
+                self._assign_three_level_counts(result.kab_pm_monthly, kab_pm)
+
+            if kab_col and skala_col:
+                kab_skala = df.groupby([kab_col, '_month', skala_col])[nib_col].nunique()
+                self._assign_three_level_counts(result.kab_skala_monthly, kab_skala)
             
             # Calculate total (sum of monthly counts)
             result.total_nib = sum(result.monthly_totals.values())
@@ -613,12 +635,12 @@ class ReferenceDataLoader:
             if year is None:
                 year = self.extract_year_from_filename(filename) or datetime.now().year
             
-            # Parse dates
             if date_col:
-                df['_month'] = df[date_col].apply(self._parse_date_to_month)
+                df['_month'] = self._month_series(df[date_col])
             else:
                 # If no date, put all in first month
                 df['_month'] = 'Januari'
+            df = df[df['_month'].isin(NAMA_BULAN)].copy()
             
             result = PBOSSReferenceData(year=year)
             
@@ -643,67 +665,46 @@ class ReferenceDataLoader:
             
 
             
-            # First, process kewenangan from FULL unfiltered data for 3.7
             if kewenangan_col:
-                for month in NAMA_BULAN:
-                    month_df_full = df[df['_month'] == month]
-                    if not month_df_full.empty:
-                        kew_counts = month_df_full[kewenangan_col].value_counts()
-                        result.monthly_kewenangan[month] = dict(kew_counts)
-            
-            # Process status_perizinan from FULL unfiltered data for 3.6
+                kew_counts = df.groupby(['_month', kewenangan_col]).size()
+                self._assign_month_nested_counts(result.monthly_kewenangan, kew_counts)
+
             if status_perizinan_col:
-                for month in NAMA_BULAN:
-                    month_df_full = df[df['_month'] == month]
-                    if not month_df_full.empty:
-                        status_counts = month_df_full[status_perizinan_col].value_counts()
-                        result.monthly_status_perizinan[month] = dict(status_counts)
+                status_counts = df.groupby(['_month', status_perizinan_col]).size()
+                self._assign_month_nested_counts(result.monthly_status_perizinan, status_counts)
             
             # Now apply Gubernur filter for remaining breakdowns
             if uraian_kewenangan_col:
-                df = df[df[uraian_kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
+                gubernur_mask = df[uraian_kewenangan_col].astype(str).str.upper().str.contains('GUBERNUR', na=False)
+                df = df[gubernur_mask].copy()
             elif kewenangan_col:
-                df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
-            
-            # Process per month (Gubernur-filtered data)
-            for month in NAMA_BULAN:
-                month_df = df[df['_month'] == month]
-                
-                if month_df.empty:
-                    continue
-                
-                # Count permits for this month
-                result.monthly_permits[month] = len(month_df)
-                
-                # Count permits by risk level
-                if risk_col:
-                    risk_counts = month_df[risk_col].value_counts()
-                    result.monthly_risk[month] = {}
-                    for risk, count in risk_counts.items():
-                        risk_str = str(risk).strip().upper()
-                        # Map short codes to full names
-                        risk_name = self.RISK_MAP.get(risk_str, risk_str)
-                        result.monthly_risk[month][risk_name] = count
-                
-                # Count permits by sector
-                if sector_col:
-                    sector_counts = month_df[sector_col].value_counts()  # All sectors
-                    result.monthly_sector[month] = dict(sector_counts)
-                
-                # Count permits by Kab/Kota
-                if kab_kota_col:
-                    kab_counts = month_df[kab_kota_col].value_counts()
-                    result.monthly_by_kab_kota[month] = dict(kab_counts)
-                
-                # Count permits by Status PM
-                if status_pm_col:
-                    pm_counts = month_df[status_pm_col].value_counts()
-                    result.monthly_status_pm[month] = dict(pm_counts)
-                
-                # Count permits by Jenis Perizinan
-                if jenis_perizinan_col:
-                    jenis_counts = month_df[jenis_perizinan_col].value_counts().head(15)
-                    result.monthly_jenis_perizinan[month] = dict(jenis_counts)
+                gubernur_mask = df[kewenangan_col].astype(str).str.upper().str.contains('GUBERNUR', na=False)
+                df = df[gubernur_mask].copy()
+
+            self._assign_count_by_month(result.monthly_permits, df.groupby('_month').size())
+
+            if risk_col:
+                risk_counts = df.groupby(['_month', risk_col]).size()
+                def risk_name(value):
+                    risk_str = str(value).strip().upper()
+                    return self.RISK_MAP.get(risk_str, risk_str)
+                self._assign_month_nested_counts(result.monthly_risk, risk_counts, risk_name)
+
+            if sector_col:
+                sector_counts = df.groupby(['_month', sector_col]).size()
+                self._assign_month_nested_counts(result.monthly_sector, sector_counts)
+
+            if kab_kota_col:
+                kab_counts = df.groupby(['_month', kab_kota_col]).size()
+                self._assign_month_nested_counts(result.monthly_by_kab_kota, kab_counts)
+
+            if status_pm_col:
+                pm_counts = df.groupby(['_month', status_pm_col]).size()
+                self._assign_month_nested_counts(result.monthly_status_pm, pm_counts)
+
+            if jenis_perizinan_col:
+                jenis_counts = df.groupby(['_month', jenis_perizinan_col]).size()
+                self._assign_month_nested_counts(result.monthly_jenis_perizinan, jenis_counts, limit_per_month=15)
             
             # Calculate total permits (from Gubernur-filtered data)
             result.total_permits = len(df)
@@ -745,126 +746,97 @@ class ReferenceDataLoader:
             if year is None:
                 year = self.extract_year_from_filename(filename) or datetime.now().year
             
-            # Parse dates
-            # Parse dates and Filter by Year
             if date_col:
-                # First convert to datetime objects
-                df['_date_obj'] = df[date_col].apply(self._parse_date_obj)
+                df['_date_obj'] = self._parse_date_series(df[date_col])
                 
                 # Filter by year if specified
                 if year:
-                    df = df[df['_date_obj'].apply(lambda x: x.year == year if x else False)]
+                    df = df[df['_date_obj'].dt.year == year].copy()
                 
                 # Then extract month names from the filtered data
-                df['_month'] = df['_date_obj'].apply(lambda x: self.MONTH_MAP.get(x.month) if x else None)
+                df['_month'] = df['_date_obj'].dt.month.map(self.MONTH_MAP)
             else:
                 df['_month'] = 'Januari'
+            df = df[df['_month'].isin(NAMA_BULAN)].copy()
             
             result = ProyekReferenceData(year=year)
             
             # Filter by Kewenangan = Gubernur
             kewenangan_col = self._find_column(df, ['kewenangan'])
             if kewenangan_col:
-                df = df[df[kewenangan_col].str.upper().str.contains('GUBERNUR', na=False)]
+                gubernur_mask = df[kewenangan_col].astype(str).str.upper().str.contains('GUBERNUR', na=False)
+                df = df[gubernur_mask].copy()
+            
+            if investment_col:
+                df[investment_col] = pd.to_numeric(df[investment_col], errors='coerce').fillna(0)
+            if tki_col:
+                df[tki_col] = pd.to_numeric(df[tki_col], errors='coerce').fillna(0)
+            if tka_col:
+                df[tka_col] = pd.to_numeric(df[tka_col], errors='coerce').fillna(0)
             
             # Try to find a Project ID column for deduplication (to fix inflated labor counts)
             id_col = self._find_column(df, ['id_proyek', 'id proyek', 'nomor_proyek', 'kode_proyek', 'nib'])
 
-            # Process per month (sum all, no dedup)
-            for month in NAMA_BULAN:
-                month_df = df[df['_month'] == month]
-                
-                if month_df.empty:
-                    continue
-                
-                # Total investment for month
-                if investment_col:
-                    result.monthly_investment[month] = month_df[investment_col].sum()
-                    
-                    # PMA investment
-                    if pm_col:
-                        pma_df = month_df[month_df[pm_col].str.upper().str.contains('PMA', na=False)]
-                        pmdn_df = month_df[month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
-                        result.monthly_pma[month] = pma_df[investment_col].sum()
-                        result.monthly_pmdn[month] = pmdn_df[investment_col].sum()
-                    
-                    # By wilayah
-                    if wilayah_col:
-                        wilayah_sums = month_df.groupby(wilayah_col)[investment_col].sum()
-                        result.monthly_by_wilayah[month] = dict(wilayah_sums)
-                
-                # Labor counts (Total)
-                # Note: We might need dedup here too if global stats are also inflated, 
-                # but user specifically mentioned "per district/city" in Section 2.5
-                if tki_col:
-                    result.monthly_tki[month] = int(month_df[tki_col].sum())
-                if tka_col:
-                    result.monthly_tka[month] = int(month_df[tka_col].fillna(0).sum())
-                
-                # Project count (total and by PM status)
-                result.monthly_projects[month] = len(month_df)
-                
-                # PMA and PMDN project counts
-                if pm_col:
-                    pma_df = month_df[month_df[pm_col].str.upper().str.contains('PMA', na=False) & ~month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
-                    pmdn_df = month_df[month_df[pm_col].str.upper().str.contains('PMDN', na=False)]
-                    result.monthly_pma_projects[month] = len(pma_df)
-                    result.monthly_pmdn_projects[month] = len(pmdn_df)
-                
-                # By Skala Usaha (project count by business scale)
-                if skala_col:
-                    skala_counts = month_df[skala_col].value_counts()
-                    result.monthly_by_skala_usaha[month] = dict(skala_counts)
-                
-                # Labor by Wilayah (TKI+TKA combined per wilayah)
-                # FIX: Deduplicate by Project ID to prevent double counting (Vectorized)
-                if wilayah_col and (tki_col or tka_col):
-                    labor_by_wil = {}
-                    
-                    # 1. Prepare Calculation DataFrame
-                    if id_col:
-                        # Keep one row per (Wilayah, ProjectID) to avoid double counting labor
-                        calc_df = month_df.drop_duplicates(subset=[wilayah_col, id_col])
-                    else:
-                        # Fallback: Deduplicate by Name + Inv + Location if no ID found
-                        # This handles cases where one project has multiple KBLI rows but same Labor stats
-                        dedup_cols = [wilayah_col]
-                        
-                        # Add Company Name to logic if found
-                        name_col = self._find_column(df, ['nama_perusahaan', 'nama perusahaan', 'nama_perseroan', 'pelaku_usaha'])
-                        if name_col:
-                            dedup_cols.append(name_col)
-                        
-                        # Add Investment to logic (projects usually have distinct inv values, or at least same project = same inv)
-                        if investment_col:
-                            dedup_cols.append(investment_col)
-                            
-                        calc_df = month_df.drop_duplicates(subset=dedup_cols)
-                    
-                    # 2. GroupBy and Sum (High Performance)
-                    cols_to_sum = []
-                    if tki_col: cols_to_sum.append(tki_col)
-                    if tka_col: cols_to_sum.append(tka_col)
-                    
-                    if cols_to_sum:
-                        # Ensure numeric types
-                        for col in cols_to_sum:
-                            calc_df[col] = pd.to_numeric(calc_df[col], errors='coerce').fillna(0)
-                            
-                        sums = calc_df.groupby(wilayah_col)[cols_to_sum].sum()
-                        
-                        # 3. Convert to Dictionary
-                        for wil, row in sums.iterrows():
-                            tki_sum = row[tki_col] if tki_col in row else 0
-                            tka_sum = row[tka_col] if tka_col in row else 0
-                            labor_by_wil[wil] = int(tki_sum + tka_sum)
-                            
-                    result.monthly_labor_by_wilayah[month] = labor_by_wil
-                
-                # Project count by Wilayah
+            if investment_col:
+                for month, value in df.groupby('_month')[investment_col].sum().items():
+                    result.monthly_investment[month] = float(value)
+
                 if wilayah_col:
-                    proj_counts = month_df[wilayah_col].value_counts()
-                    result.monthly_projects_by_wilayah[month] = dict(proj_counts)
+                    wilayah_sums = df.groupby(['_month', wilayah_col])[investment_col].sum().reset_index(name='investment')
+                    for month, wilayah, investment in wilayah_sums.itertuples(index=False, name=None):
+                        result.monthly_by_wilayah.setdefault(month, {})[wilayah] = float(investment)
+
+            if pm_col:
+                pm_upper = df[pm_col].astype(str).str.upper()
+                pma_invest_mask = pm_upper.str.contains('PMA', na=False)
+                pmdn_mask = pm_upper.str.contains('PMDN', na=False)
+                pma_project_mask = pma_invest_mask & ~pmdn_mask
+
+                if investment_col:
+                    for month, value in df.loc[pma_invest_mask].groupby('_month')[investment_col].sum().items():
+                        result.monthly_pma[month] = float(value)
+                    for month, value in df.loc[pmdn_mask].groupby('_month')[investment_col].sum().items():
+                        result.monthly_pmdn[month] = float(value)
+
+                self._assign_count_by_month(result.monthly_pma_projects, df.loc[pma_project_mask].groupby('_month').size())
+                self._assign_count_by_month(result.monthly_pmdn_projects, df.loc[pmdn_mask].groupby('_month').size())
+
+            if tki_col:
+                self._assign_count_by_month(result.monthly_tki, df.groupby('_month')[tki_col].sum())
+            if tka_col:
+                self._assign_count_by_month(result.monthly_tka, df.groupby('_month')[tka_col].sum())
+
+            self._assign_count_by_month(result.monthly_projects, df.groupby('_month').size())
+
+            if skala_col:
+                skala_counts = df.groupby(['_month', skala_col]).size()
+                self._assign_month_nested_counts(result.monthly_by_skala_usaha, skala_counts)
+
+            if wilayah_col and (tki_col or tka_col):
+                if id_col:
+                    dedup_cols = ['_month', wilayah_col, id_col]
+                else:
+                    dedup_cols = ['_month', wilayah_col]
+                    name_col = self._find_column(df, ['nama_perusahaan', 'nama perusahaan', 'nama_perseroan', 'pelaku_usaha'])
+                    if name_col:
+                        dedup_cols.append(name_col)
+                    if investment_col:
+                        dedup_cols.append(investment_col)
+
+                calc_df = df.drop_duplicates(subset=dedup_cols).copy()
+                calc_df['_labor_total'] = 0
+                if tki_col:
+                    calc_df['_labor_total'] += calc_df[tki_col]
+                if tka_col:
+                    calc_df['_labor_total'] += calc_df[tka_col]
+
+                labor_sums = calc_df.groupby(['_month', wilayah_col])['_labor_total'].sum().reset_index(name='labor')
+                for month, wilayah, labor in labor_sums.itertuples(index=False, name=None):
+                    result.monthly_labor_by_wilayah.setdefault(month, {})[wilayah] = int(labor)
+
+            if wilayah_col:
+                project_counts = df.groupby(['_month', wilayah_col]).size()
+                self._assign_month_nested_counts(result.monthly_projects_by_wilayah, project_counts)
             
             return result
             
