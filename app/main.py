@@ -472,8 +472,7 @@ st.markdown("""
         padding: 0.5rem;
     }
 
-    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button {
         background: var(--primary-color) !important;
         border: 1px solid rgba(255, 255, 255, 0.65) !important;
         color: #ffffff !important;
@@ -482,17 +481,14 @@ st.markdown("""
     }
 
     [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button:hover,
-    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button:focus,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button:focus {
+    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button:focus {
         background: var(--secondary-color) !important;
         border-color: #ffffff !important;
         color: #ffffff !important;
         opacity: 1 !important;
     }
 
-    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button *,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] button * {
+    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button * {
         color: #ffffff !important;
         fill: currentColor !important;
         stroke: currentColor !important;
