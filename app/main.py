@@ -24,6 +24,13 @@ from app.data.reference_loader import ReferenceDataLoader
 from app.visualization.charts import ChartGenerator
 from app.narrative.generator import NarrativeGenerator
 from app.config import LOGO_PATH, TRIWULAN_KE_BULAN, NAMA_BULAN
+from app.reporting import (
+    build_comparison_context,
+    report_to_dataframe,
+    resolve_reference_data,
+    sum_month_values,
+    validate_report_inputs,
+)
 
 
 # Page configuration
@@ -830,11 +837,9 @@ def render_sidebar():
         st.divider()
         
         if st.button("🚀 Generate Laporan", type="primary", use_container_width=True):
-             # Check if at least one file is uploaded
-             if not (st.session_state.get('nib_ref_file') or 
-                     st.session_state.get('pb_oss_ref_file') or 
-                     st.session_state.get('proyek_ref_file')):
-                 st.error("⚠️ Upload minimal satu file referensi!")
+             valid_inputs, validation_message = validate_report_inputs(st.session_state)
+             if not valid_inputs:
+                 st.error(validation_message)
              else:
                  with st.spinner("Memproses data..."):
                      # Pass empty list for uploaded_files since we use session_state logic now
@@ -848,7 +853,8 @@ def render_sidebar():
                  
         # Clear button
         if st.button("🗑️ Clear Data", use_container_width=True):
-            cols_to_clear = ['nib_ref_file', 'pb_oss_ref_file', 'proyek_ref_file', 
+            cols_to_clear = ['nib_ref_file', 'pb_oss_ref_file', 'proyek_ref_file',
+                             'nib_prev_ref_file', 'pb_oss_prev_ref_file', 'proyek_prev_ref_file',
                              'report', 'stats', 'aggregator', 'investment_reports', 
                              'tw_summary', 'prev_year_tw_summary',
                              'current_proyek_data', 'prev_proyek_data',
@@ -899,6 +905,13 @@ def process_data(uploaded_files, jenis_periode: str, periode: str, tahun: int):
     
     # Determine months included in the period
     months = loader.get_months_for_period(jenis_periode, periode)
+    valid_inputs, validation_message = validate_report_inputs(st.session_state)
+    if not valid_inputs:
+        st.error(validation_message)
+        st.session_state.report = None
+        st.session_state.stats = {}
+        st.session_state.aggregator = aggregator
+        return False
     
     # 1. Process NIB Data (if uploaded)
     nib_file = st.session_state.get('nib_ref_file')
@@ -1297,11 +1310,8 @@ def render_report(report, stats: dict):
     st.markdown('<div class="section-title">1.1 Rekapitulasi Data NIB</div>', 
                 unsafe_allow_html=True)
     
-    # === Load Previous Year Data for Comparison ===
-    # === Load Previous Year Data for Comparison ===
-    # Use ReferenceDataLoader because NIB files are Reference/Master files, not PB OSS files
+    # Load previous year data for comparison.
     from app.data.reference_loader import ReferenceDataLoader
-    from app.config import TRIWULAN_KE_BULAN
     
     ref_loader = ReferenceDataLoader()
     
@@ -1325,122 +1335,23 @@ def render_report(report, stats: dict):
              prev_full_data = ref_loader.load_nib(prev_nib_file.getvalue(), prev_nib_file.name)
          except Exception: pass
 
-    # 2. Comparison Context Setup (Centralized Logic)
-    # Define target months for Main Report and Comparison Charts
-    from app.config import TRIWULAN_KE_BULAN
-    
-    # Context dictionary to hold all comparison parameters
-    comp_ctx = {
-        # Main Report Scope
-        'main_target_months': [],
-        # YoY Chart Scope
-        'yoy_curr_months': [], 
-        'yoy_prev_months': [],
-        'yoy_curr_label': "",
-        'yoy_prev_label': "",
-        # QoQ Chart Scope
-        'qoq_curr_months': [],
-        'qoq_prev_months': [],
-        'qoq_curr_label': "",
-        'qoq_prev_label': "",
-        'has_prev_q_data': False # Flag to check if data available
-    }
-
-    # Helper for Semester Months
-    SEMESTER_KE_BULAN = {
-        "Semester I": TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"],
-        "Semester II": TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"],
-    }
-
-    if report.period_type == "Triwulan":
-        # Standard Logic
-        comp_ctx['main_target_months'] = TRIWULAN_KE_BULAN.get(report.period_name, [])
-        
-        # YoY: Same TW, Prev Year
-        comp_ctx['yoy_curr_months'] = comp_ctx['main_target_months']
-        comp_ctx['yoy_prev_months'] = comp_ctx['main_target_months']
-        comp_ctx['yoy_curr_label'] = f"{report.period_name} {report.year}"
-        comp_ctx['yoy_prev_label'] = f"{report.period_name} {report.year - 1}"
-        
-        # QoQ: Prev TW
-        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
-        try:
-            curr_idx = tw_list.index(report.period_name)
-            comp_ctx['qoq_curr_months'] = comp_ctx['main_target_months']
-            comp_ctx['qoq_curr_label'] = f"{report.period_name} {report.year}"
-            
-            if curr_idx > 0: # Same year
-                prev_q_name = tw_list[curr_idx - 1]
-                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
-                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year}"
-            else: # Prev year TW IV
-                prev_q_name = "TW IV"
-                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
-                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year - 1}"
-        except: pass
-
-    elif report.period_type == "Semester":
-        comp_ctx['main_target_months'] = SEMESTER_KE_BULAN.get(report.period_name, [])
-        
-        if report.period_name == "Semester I":
-            # YoY: Q2 vs Q2
-            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['yoy_curr_label'] = f"TW II {report.year}"
-            comp_ctx['yoy_prev_label'] = f"TW II {report.year - 1}"
-            
-            # QoQ: Q2 vs Q1
-            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW I"]
-            comp_ctx['qoq_curr_label'] = f"TW II {report.year}"
-            comp_ctx['qoq_prev_label'] = f"TW I {report.year}"
-            
-        elif report.period_name == "Semester II":
-            # YoY: Q4 vs Q4
-            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['yoy_curr_label'] = f"TW IV {report.year}"
-            comp_ctx['yoy_prev_label'] = f"TW IV {report.year - 1}"
-            
-            # QoQ: Q4 vs Q3
-            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW III"]
-            comp_ctx['qoq_curr_label'] = f"TW IV {report.year}"
-            comp_ctx['qoq_prev_label'] = f"TW III {report.year}"
-
-    elif report.period_type == "Tahunan":
-        # Main: Full Year
-        comp_ctx['main_target_months'] = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
-        
-        # YoY: Sem II vs Sem II
-        comp_ctx['yoy_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['yoy_prev_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['yoy_curr_label'] = f"Semester II {report.year}"
-        comp_ctx['yoy_prev_label'] = f"Semester II {report.year - 1}"
-        
-        # QoQ: Sem II vs Sem I (Label: "Sem I vs Sem II")
-        comp_ctx['qoq_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['qoq_prev_months'] = SEMESTER_KE_BULAN["Semester I"]
-        comp_ctx['qoq_curr_label'] = f"Semester II {report.year}"
-        comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
-
-    # Global "target_months" for legacy support in Section 1 processing
+    comp_ctx = build_comparison_context(report.period_type, report.period_name, report.year)
     target_months = comp_ctx['main_target_months']
     
     # 3. Calculate Totals (Reference Data for NIB)
     # Current Period Total (Main Report)
     current_total = 0
     if current_full_data:
-        current_total = sum(current_full_data.monthly_totals.get(m, 0) for m in target_months)
+        current_total = sum_month_values(current_full_data.monthly_totals, target_months)
         
     # Comparison chart values (using specific comparison months)
     current_yoy_val = 0
     prev_year_yoy_val = 0
     
     if current_full_data:
-        current_yoy_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['yoy_curr_months'])
+        current_yoy_val = sum_month_values(current_full_data.monthly_totals, comp_ctx['yoy_curr_months'])
     if prev_full_data:
-        prev_year_yoy_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx['yoy_prev_months'])
+        prev_year_yoy_val = sum_month_values(prev_full_data.monthly_totals, comp_ctx['yoy_prev_months'])
         
     current_qoq_val = 0
     prev_qoq_val = 0
@@ -1452,18 +1363,18 @@ def render_report(report, stats: dict):
     
     # For QoQ Current Val
     if current_full_data:
-        current_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_curr_months'])
+        current_qoq_val = sum_month_values(current_full_data.monthly_totals, comp_ctx['qoq_curr_months'])
         
     # For QoQ Prev Val
     # Check if we need to pull from prev year file (Only for Triwulan I case)
-    if report.period_type == "Triwulan" and report.period_name == "TW I":
+    if comp_ctx.get('qoq_prev_year_required'):
          if prev_full_data:
-             prev_qoq_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_prev_months'])
+             prev_qoq_val = sum_month_values(prev_full_data.monthly_totals, comp_ctx['qoq_prev_months'])
              comp_ctx['has_prev_q_data'] = True
     else:
          # Standard case (Same year)
          if current_full_data:
-             prev_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx['qoq_prev_months'])
+             prev_qoq_val = sum_month_values(current_full_data.monthly_totals, comp_ctx['qoq_prev_months'])
              comp_ctx['has_prev_q_data'] = True
             
 
@@ -1530,7 +1441,7 @@ def render_report(report, stats: dict):
     col1, col2 = st.columns([1.5, 1])
     
     with col1:
-        df = st.session_state.aggregator.to_dataframe(report)
+        df = report_to_dataframe(report, st.session_state.get('aggregator'))
         if not df.empty:
             fig_kab = chart_gen.create_horizontal_bar_gradient(
                 df,
@@ -3408,7 +3319,7 @@ def render_export_section(report, stats):
     
     with col3:
         if st.button("📊 Export Excel Summary", use_container_width=True):
-            df = st.session_state.aggregator.to_dataframe(report)
+            df = report_to_dataframe(report, st.session_state.get('aggregator'))
             if not df.empty:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -3442,7 +3353,7 @@ def generate_pdf(report, stats) -> bytes:
         charts['monthly'] = fig.to_image(format='png', scale=2)
     
     # Kab/Kota chart
-    df = st.session_state.aggregator.to_dataframe(report)
+    df = report_to_dataframe(report, st.session_state.get('aggregator'))
     if not df.empty:
         fig = chart_gen.create_horizontal_bar_gradient(df, title="NIB per Kabupaten/Kota")
         charts['kab_kota'] = fig.to_image(format='png', scale=2)
@@ -3494,73 +3405,7 @@ def generate_word(report, stats) -> bytes:
         fig = chart_gen.create_monthly_bar_with_trendline(monthly_data, show_trendline=True)
         charts['monthly'] = fig.to_image(format='png', scale=2)
     
-    # --- Section 1.1 YoY/QoQ Charts ---
-    # Build comp_ctx for Word export (replicating UI logic)
-    TRIWULAN_KE_BULAN = {
-        "TW I": ['januari', 'februari', 'maret'],
-        "TW II": ['april', 'mei', 'juni'],
-        "TW III": ['juli', 'agustus', 'september'],
-        "TW IV": ['oktober', 'november', 'desember'],
-    }
-    SEMESTER_KE_BULAN = {
-        "Semester I": TRIWULAN_KE_BULAN["TW I"] + TRIWULAN_KE_BULAN["TW II"],
-        "Semester II": TRIWULAN_KE_BULAN["TW III"] + TRIWULAN_KE_BULAN["TW IV"],
-    }
-    
-    comp_ctx = {'has_prev_q_data': False}
-    
-    if report.period_type == "Triwulan":
-        comp_ctx['main_target_months'] = TRIWULAN_KE_BULAN.get(report.period_name, [])
-        comp_ctx['yoy_curr_months'] = comp_ctx['main_target_months']
-        comp_ctx['yoy_prev_months'] = comp_ctx['main_target_months']
-        comp_ctx['yoy_curr_label'] = f"{report.period_name} {report.year}"
-        comp_ctx['yoy_prev_label'] = f"{report.period_name} {report.year - 1}"
-        
-        tw_list = ["TW I", "TW II", "TW III", "TW IV"]
-        try:
-            curr_idx = tw_list.index(report.period_name)
-            comp_ctx['qoq_curr_months'] = comp_ctx['main_target_months']
-            comp_ctx['qoq_curr_label'] = f"{report.period_name} {report.year}"
-            if curr_idx > 0:
-                prev_q_name = tw_list[curr_idx - 1]
-                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN[prev_q_name]
-                comp_ctx['qoq_prev_label'] = f"{prev_q_name} {report.year}"
-            else:
-                comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
-                comp_ctx['qoq_prev_label'] = f"TW IV {report.year - 1}"
-        except: pass
-        
-    elif report.period_type == "Semester":
-        comp_ctx['main_target_months'] = SEMESTER_KE_BULAN.get(report.period_name, [])
-        if report.period_name == "Semester I":
-            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['yoy_curr_label'] = f"TW II {report.year}"
-            comp_ctx['yoy_prev_label'] = f"TW II {report.year - 1}"
-            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW II"]
-            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW I"]
-            comp_ctx['qoq_curr_label'] = f"TW II {report.year}"
-            comp_ctx['qoq_prev_label'] = f"TW I {report.year}"
-        else:
-            comp_ctx['yoy_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['yoy_prev_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['yoy_curr_label'] = f"TW IV {report.year}"
-            comp_ctx['yoy_prev_label'] = f"TW IV {report.year - 1}"
-            comp_ctx['qoq_curr_months'] = TRIWULAN_KE_BULAN["TW IV"]
-            comp_ctx['qoq_prev_months'] = TRIWULAN_KE_BULAN["TW III"]
-            comp_ctx['qoq_curr_label'] = f"TW IV {report.year}"
-            comp_ctx['qoq_prev_label'] = f"TW III {report.year}"
-            
-    elif report.period_type == "Tahunan":
-        comp_ctx['main_target_months'] = [m for sublist in TRIWULAN_KE_BULAN.values() for m in sublist]
-        comp_ctx['yoy_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['yoy_prev_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['yoy_curr_label'] = f"Semester II {report.year}"
-        comp_ctx['yoy_prev_label'] = f"Semester II {report.year - 1}"
-        comp_ctx['qoq_curr_months'] = SEMESTER_KE_BULAN["Semester II"]
-        comp_ctx['qoq_prev_months'] = SEMESTER_KE_BULAN["Semester I"]
-        comp_ctx['qoq_curr_label'] = f"Semester II {report.year}"
-        comp_ctx['qoq_prev_label'] = f"Semester I {report.year}"
+    comp_ctx = build_comparison_context(report.period_type, report.period_name, report.year)
     
     # Get current/prev full data for Section 1.1 comparisons
     # Try session state first, then fall back to loading from uploaded files
@@ -3592,16 +3437,18 @@ def generate_word(report, stats) -> bytes:
     prev_qoq_val = 0
     
     if current_full_data and hasattr(current_full_data, 'monthly_totals'):
-        current_yoy_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('yoy_curr_months', []))
-        current_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_curr_months', []))
-        prev_qoq_val = sum(current_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_prev_months', []))
-        comp_ctx['has_prev_q_data'] = True
+        current_yoy_val = sum_month_values(current_full_data.monthly_totals, comp_ctx.get('yoy_curr_months', []))
+        current_qoq_val = sum_month_values(current_full_data.monthly_totals, comp_ctx.get('qoq_curr_months', []))
+        if not comp_ctx.get('qoq_prev_year_required'):
+            prev_qoq_val = sum_month_values(current_full_data.monthly_totals, comp_ctx.get('qoq_prev_months', []))
+            comp_ctx['has_prev_q_data'] = True
         
     if prev_full_data and hasattr(prev_full_data, 'monthly_totals'):
-        prev_year_yoy_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('yoy_prev_months', []))
+        prev_year_yoy_val = sum_month_values(prev_full_data.monthly_totals, comp_ctx.get('yoy_prev_months', []))
         # For TW I, QoQ prev comes from prev year
-        if report.period_type == "Triwulan" and report.period_name == "TW I":
-            prev_qoq_val = sum(prev_full_data.monthly_totals.get(m, 0) for m in comp_ctx.get('qoq_prev_months', []))
+        if comp_ctx.get('qoq_prev_year_required'):
+            prev_qoq_val = sum_month_values(prev_full_data.monthly_totals, comp_ctx.get('qoq_prev_months', []))
+            comp_ctx['has_prev_q_data'] = True
     
     # Generate Section 1.1 YoY chart
     if prev_year_yoy_val > 0:
@@ -3628,7 +3475,7 @@ def generate_word(report, stats) -> bytes:
         charts['monthly_qoq'] = fig_qoq.to_image(format='png', scale=2)
     
     # Kab/Kota chart
-    df = st.session_state.aggregator.to_dataframe(report)
+    df = report_to_dataframe(report, st.session_state.get('aggregator'))
     if not df.empty:
         fig = chart_gen.create_horizontal_bar_gradient(df, title="NIB per Kabupaten/Kota")
         charts['kab_kota'] = fig.to_image(format='png', scale=2)
@@ -3759,6 +3606,13 @@ def generate_word(report, stats) -> bytes:
         from app.data.reference_loader import ReferenceDataLoader
         loader = ReferenceDataLoader()
         months = loader.get_months_for_period(report.period_type, report.period_name)
+        prev_proyek_data = resolve_reference_data(
+            st.session_state,
+            'prev_proyek_data',
+            'proyek_prev_ref_file',
+            _cached_load_proyek,
+            report.year - 1
+        )
         
         # 2.1 PMA/PMDN Proyek chart
         pma_projects = proyek_data.get_period_pma_projects(months)
@@ -3769,41 +3623,6 @@ def generate_word(report, stats) -> bytes:
                 pmdn_total=pmdn_projects
             )
             charts['proyek_pm'] = fig.to_image(format='png', scale=2)
-
-            # --- YoY & QoQ Comparison (Section 2.2) ---
-            # Try to load previous project data if available in session state
-            prev_proyek_file = st.session_state.get('proyek_prev_ref_file')
-            prev_proyek_data = None
-            if prev_proyek_file:
-                try:
-                    # Re-load prev data
-                    # We use a simple load strategy here since we are in export context
-                    from app.data.loader import DataLoader
-                    dl = DataLoader()
-                    # Loading raw investment data
-                    prev_inv_reports = dl.load_realisasi_investasi(prev_proyek_file.getvalue(), prev_proyek_file.name)
-                    
-                    # We need a way to query "get_period_pma_projects" from this raw dict of reports
-                    # The 'proyek_data' (InvestmentDataLoader) wrapper provides this method.
-                    # So ideally, wrap it.
-                    from app.data.reference_loader import ReferenceDataLoader
-                    ref_loader = ReferenceDataLoader()
-                    # Manually construct the wrapper (InvestmentDataLoader logic is inside ReferenceDataLoader or similar?)
-                    # No, ReferenceDataLoader HAS a method load_investment_data that returns an InvestmentDataLoader instance (which is what 'proyek_data' likely is).
-                    # Let's check ReferenceDataLoader in previous turn... it wasn't fully shown.
-                    # Assuming ReferenceDataLoader has a method to load investment data.
-                    # Checking main.py: `proyek_data = _cached_load_proyek(...)`
-                    # Let's assume we can just use the provided `proyek_data` for CURRENT and need to manually handle PREV.
-                    
-                    # Hack: since we can't easily import the specific helper, let's use the `loader` object we already imported in line 3541
-                    # `loader` is `ReferenceDataLoader`.
-                    # Does it have a public load method?
-                    # Let's try `loader.load_investment_data` (common naming).
-                    # If not, we fail gracefully.
-                    if hasattr(loader, 'load_investment_data'):
-                         prev_proyek_data = loader.load_investment_data(prev_proyek_file)
-                except Exception:
-                    pass
 
             # YoY Chart
             if prev_proyek_data:
@@ -4001,6 +3820,13 @@ def generate_word(report, stats) -> bytes:
         from app.data.reference_loader import ReferenceDataLoader
         loader = ReferenceDataLoader()
         months = loader.get_months_for_period(report.period_type, report.period_name)
+        prev_pb_data = resolve_reference_data(
+            st.session_state,
+            'prev_pb_data',
+            'pb_oss_prev_ref_file',
+            _cached_load_pb_oss,
+            report.year - 1
+        )
         
         # 3.1 Kab/Kota PB chart
         kab_data = pb_data.get_period_by_kab_kota(months)
@@ -4021,27 +3847,21 @@ def generate_word(report, stats) -> bytes:
             charts['pb_pm'] = fig.to_image(format='png', scale=2)
             
             # --- YoY Comparison (Section 3.2) ---
-            prev_pb_file = st.session_state.get('pb_oss_prev_ref_file')
-            if prev_pb_file and hasattr(loader, 'load_pb_oss_data'):
-                try:
-                    prev_pb_data = loader.load_pb_oss_data(prev_pb_file)
-                    if prev_pb_data:
-                         prev_pm_pb = prev_pb_data.get_period_status_pm(months)
-                         fig_yoy_pb_pm = chart_gen.create_grouped_comparison_two_categories(
-                             curr_val1=pm_pb_data.get('PMA', 0),
-                             curr_val2=pm_pb_data.get('PMDN', 0),
-                             prev_val1=prev_pm_pb.get('PMA', 0),
-                             prev_val2=prev_pm_pb.get('PMDN', 0),
-                             cat1_label="PMA",
-                             cat2_label="PMDN",
-                             current_period_label=f"{report.year}",
-                             prev_period_label=f"{report.year - 1}",
-                             title="Status PM PB (y-o-y)",
-                             y_axis_title="Jumlah"
-                         )
-                         charts['pb_pm_yoy'] = fig_yoy_pb_pm.to_image(format='png', scale=2)
-                except Exception:
-                    pass
+            if prev_pb_data:
+                 prev_pm_pb = prev_pb_data.get_period_status_pm(months)
+                 fig_yoy_pb_pm = chart_gen.create_grouped_comparison_two_categories(
+                     curr_val1=pm_pb_data.get('PMA', 0),
+                     curr_val2=pm_pb_data.get('PMDN', 0),
+                     prev_val1=prev_pm_pb.get('PMA', 0),
+                     prev_val2=prev_pm_pb.get('PMDN', 0),
+                     cat1_label="PMA",
+                     cat2_label="PMDN",
+                     current_period_label=f"{report.year}",
+                     prev_period_label=f"{report.year - 1}",
+                     title="Status PM PB (y-o-y)",
+                     y_axis_title="Jumlah"
+                 )
+                 charts['pb_pm_yoy'] = fig_yoy_pb_pm.to_image(format='png', scale=2)
             
             # --- QoQ Comparison (Section 3.2) ---
             if report.period_type == "Triwulan" and report.period_name != "TW I":
