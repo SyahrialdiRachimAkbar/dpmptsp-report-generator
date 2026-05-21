@@ -6,6 +6,8 @@ using python-docx library.
 """
 
 import io
+import html
+import re
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
@@ -173,26 +175,47 @@ class WordExporter:
         doc.add_page_break()
         self._add_section_title(doc, "2. Rekapitulasi Data Investasi dan Proyek")
         
-        # 2.1 PMA/PMDN Proyek
-        if 'proyek_pm' in charts:
-            self._add_subsection_title(doc, "2.1 Distribusi Proyek PMA/PMDN")
-            self._add_chart_image(doc, charts['proyek_pm'], width=4)
+        # 2.1 Rekapitulasi proyek berdasarkan periode dan lokasi
+        if any(k in charts for k in ['proyek_monthly', 'proyek_kab_kota', 'proyek_total_yoy', 'proyek_total_qoq']) or getattr(narratives, 'proyek_rekapitulasi', ''):
+            self._add_subsection_title(doc, "2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota")
+            if 'proyek_monthly' in charts:
+                self._add_chart_image(doc, charts['proyek_monthly'], width=5)
+            if 'proyek_kab_kota' in charts:
+                self._add_chart_image(doc, charts['proyek_kab_kota'], width=5.5)
+            if 'proyek_total_yoy' in charts:
+                self._add_chart_image(doc, charts['proyek_total_yoy'], width=4.5)
+            if 'proyek_total_qoq' in charts:
+                self._add_chart_image(doc, charts['proyek_total_qoq'], width=4.5)
+            if getattr(narratives, 'proyek_rekapitulasi', ''):
+                self._add_paragraph(doc, narratives.proyek_rekapitulasi)
+
+        # 2.2 PMA/PMDN Proyek
+        if any(k in charts for k in ['proyek_pm', 'proyek_pm_yoy', 'proyek_pm_qoq']) or getattr(narratives, 'proyek_status_pm', ''):
+            self._add_subsection_title(doc, "2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal")
+            if 'proyek_pm' in charts:
+                self._add_chart_image(doc, charts['proyek_pm'], width=4)
             
             if 'proyek_pm_yoy' in charts:
-                 self._add_chart_image(doc, charts['proyek_pm_yoy'], width=4)
+                self._add_chart_image(doc, charts['proyek_pm_yoy'], width=4)
             
             if 'proyek_pm_qoq' in charts:
-                 self._add_chart_image(doc, charts['proyek_pm_qoq'], width=4)
+                self._add_chart_image(doc, charts['proyek_pm_qoq'], width=4)
+            if getattr(narratives, 'proyek_status_pm', ''):
+                self._add_paragraph(doc, narratives.proyek_status_pm)
         
         # 2.3 Skala Usaha
+        if any(k in charts for k in ['skala_usaha', 'skala_usaha_yoy', 'skala_usaha_qoq']) or getattr(narratives, 'proyek_skala_usaha', ''):
             self._add_subsection_title(doc, "2.3 Proyek Berdasarkan Skala Usaha")
-            self._add_chart_image(doc, charts['skala_usaha'], width=5)
+            if 'skala_usaha' in charts:
+                self._add_chart_image(doc, charts['skala_usaha'], width=5)
             
             if 'skala_usaha_yoy' in charts:
                 self._add_chart_image(doc, charts['skala_usaha_yoy'], width=5)
             
             if 'skala_usaha_qoq' in charts:
                 self._add_chart_image(doc, charts['skala_usaha_qoq'], width=5)
+            if getattr(narratives, 'proyek_skala_usaha', ''):
+                self._add_paragraph(doc, narratives.proyek_skala_usaha)
         
         # 2.4 Investasi per Wilayah
         if 'inv_wilayah' in charts:
@@ -216,52 +239,92 @@ class WordExporter:
         self._add_section_title(doc, "3. Perizinan Berusaha Berbasis Risiko")
         
         # 3.1 Kab/Kota PB
-        if 'pb_kab_kota' in charts:
-            self._add_subsection_title(doc, "3.1 Perizinan per Kabupaten/Kota")
-            self._add_chart_image(doc, charts['pb_kab_kota'], width=5)
+        if any(k in charts for k in ['pb_monthly', 'pb_kab_kota', 'pb_total_yoy', 'pb_total_qoq', 'pb_kab_table']) or getattr(narratives, 'pb_periode_lokasi', ''):
+            self._add_subsection_title(doc, "3.1 Rekapitulasi Berdasarkan Periode dan Lokasi Usaha di Kabupaten/Kota")
+            if 'pb_monthly' in charts:
+                self._add_chart_image(doc, charts['pb_monthly'], width=5)
+            if 'pb_kab_kota' in charts:
+                self._add_chart_image(doc, charts['pb_kab_kota'], width=5.5)
+            if 'pb_total_yoy' in charts:
+                self._add_chart_image(doc, charts['pb_total_yoy'], width=4.5)
+            if 'pb_total_qoq' in charts:
+                self._add_chart_image(doc, charts['pb_total_qoq'], width=4.5)
+            if getattr(narratives, 'pb_periode_lokasi', ''):
+                self._add_paragraph(doc, narratives.pb_periode_lokasi)
+            if 'pb_kab_table' in charts:
+                self._add_chart_image(doc, charts['pb_kab_table'], width=6)
         
         # 3.2 Status PM PB
-        if 'pb_pm' in charts:
-            self._add_subsection_title(doc, "3.2 Perizinan Berdasarkan Status PM")
-            self._add_chart_image(doc, charts['pb_pm'], width=4)
+        if any(k in charts for k in ['pb_pm_monthly', 'pb_pm', 'pb_pm_yoy', 'pb_pm_qoq', 'pb_pm_table']) or getattr(narratives, 'pb_status_pm', ''):
+            self._add_subsection_title(doc, "3.2 Rekapitulasi Berdasarkan Status Penanaman Modal")
+            if 'pb_pm_monthly' in charts:
+                self._add_chart_image(doc, charts['pb_pm_monthly'], width=5)
+            if 'pb_pm' in charts:
+                self._add_chart_image(doc, charts['pb_pm'], width=4)
             
             if 'pb_pm_yoy' in charts:
                 self._add_chart_image(doc, charts['pb_pm_yoy'], width=4)
             
             if 'pb_pm_qoq' in charts:
                 self._add_chart_image(doc, charts['pb_pm_qoq'], width=4)
+            if getattr(narratives, 'pb_status_pm', ''):
+                self._add_paragraph(doc, narratives.pb_status_pm)
+            if 'pb_pm_table' in charts:
+                self._add_chart_image(doc, charts['pb_pm_table'], width=6)
         
         # 3.3 Risk Level PB
-        if 'pb_risk' in charts:
-            self._add_subsection_title(doc, "3.3 Perizinan Berdasarkan Tingkat Risiko")
-            self._add_chart_image(doc, charts['pb_risk'], width=5)
+        if any(k in charts for k in ['pb_risk', 'pb_risk_yoy', 'pb_risk_qoq', 'pb_risk_table']) or getattr(narratives, 'pb_risiko', ''):
+            self._add_subsection_title(doc, "3.3 Rekapitulasi Berdasarkan Tingkat Risiko")
+            if 'pb_risk' in charts:
+                self._add_chart_image(doc, charts['pb_risk'], width=5)
+            if 'pb_risk_yoy' in charts:
+                self._add_chart_image(doc, charts['pb_risk_yoy'], width=4.5)
+            if 'pb_risk_qoq' in charts:
+                self._add_chart_image(doc, charts['pb_risk_qoq'], width=4.5)
+            if getattr(narratives, 'pb_risiko', ''):
+                self._add_paragraph(doc, narratives.pb_risiko)
+            if 'pb_risk_table' in charts:
+                self._add_chart_image(doc, charts['pb_risk_table'], width=6)
         
         # 3.4 Sector PB
+        if any(k in charts for k in ['pb_sector', 'pb_sector_table']) or getattr(narratives, 'pb_sektor', ''):
             self._add_subsection_title(doc, "3.4 Top 10 Sektor Perizinan")
-            self._add_chart_image(doc, charts['pb_sector'], width=5)
+            if 'pb_sector' in charts:
+                self._add_chart_image(doc, charts['pb_sector'], width=5)
             if hasattr(narratives, 'pb_sektor') and narratives.pb_sektor:
                 self._add_paragraph(doc, narratives.pb_sektor)
+            if 'pb_sector_table' in charts:
+                self._add_chart_image(doc, charts['pb_sector_table'], width=6)
 
         # 3.5 Jenis Perizinan
-        if 'pb_jenis' in charts:
-             self._add_subsection_title(doc, "3.5 Rekapitulasi Jenis Perizinan")
-             self._add_chart_image(doc, charts['pb_jenis'], width=5)
-             if hasattr(narratives, 'pb_jenis') and narratives.pb_jenis:
+        if any(k in charts for k in ['pb_jenis', 'pb_jenis_table']) or getattr(narratives, 'pb_jenis', ''):
+            self._add_subsection_title(doc, "3.5 Rekapitulasi Jenis Perizinan")
+            if 'pb_jenis' in charts:
+                self._add_chart_image(doc, charts['pb_jenis'], width=5)
+            if hasattr(narratives, 'pb_jenis') and narratives.pb_jenis:
                 self._add_paragraph(doc, narratives.pb_jenis)
+            if 'pb_jenis_table' in charts:
+                self._add_chart_image(doc, charts['pb_jenis_table'], width=6)
 
         # 3.6 Status Respon
-        if 'pb_status_respon' in charts:
-             self._add_subsection_title(doc, "3.6 Rekapitulasi Status Respon")
-             self._add_chart_image(doc, charts['pb_status_respon'], width=5)
-             if hasattr(narratives, 'pb_status_respon') and narratives.pb_status_respon:
+        if any(k in charts for k in ['pb_status_respon', 'pb_status_respon_table']) or getattr(narratives, 'pb_status_respon', ''):
+            self._add_subsection_title(doc, "3.6 Rekapitulasi Status Respon")
+            if 'pb_status_respon' in charts:
+                self._add_chart_image(doc, charts['pb_status_respon'], width=5)
+            if hasattr(narratives, 'pb_status_respon') and narratives.pb_status_respon:
                 self._add_paragraph(doc, narratives.pb_status_respon)
+            if 'pb_status_respon_table' in charts:
+                self._add_chart_image(doc, charts['pb_status_respon_table'], width=6)
 
         # 3.7 Kewenangan
-        if 'pb_kewenangan' in charts:
-             self._add_subsection_title(doc, "3.7 Rekapitulasi Kewenangan")
-             self._add_chart_image(doc, charts['pb_kewenangan'], width=5)
-             if hasattr(narratives, 'pb_kewenangan') and narratives.pb_kewenangan:
+        if any(k in charts for k in ['pb_kewenangan', 'pb_kewenangan_table']) or getattr(narratives, 'pb_kewenangan', ''):
+            self._add_subsection_title(doc, "3.7 Rekapitulasi Kewenangan")
+            if 'pb_kewenangan' in charts:
+                self._add_chart_image(doc, charts['pb_kewenangan'], width=5)
+            if hasattr(narratives, 'pb_kewenangan') and narratives.pb_kewenangan:
                 self._add_paragraph(doc, narratives.pb_kewenangan)
+            if 'pb_kewenangan_table' in charts:
+                self._add_chart_image(doc, charts['pb_kewenangan_table'], width=6)
         
         # Section 7: Kesimpulan
         doc.add_page_break()
@@ -358,7 +421,21 @@ class WordExporter:
             "   1.3 Status Penanaman Modal",
             "   1.4 Kategori Pelaku Usaha",
             "   1.5 Perizinan Berdasarkan Risiko dan Sektor",
-            "2. Kesimpulan",
+            "2. Rekapitulasi Data Investasi dan Proyek",
+            "   2.1 Rekapitulasi Data Proyek Berdasarkan Periode dan Kabupaten/Kota",
+            "   2.2 Rekapitulasi Proyek Berdasarkan Status Penanaman Modal",
+            "   2.3 Proyek Berdasarkan Skala Usaha",
+            "   2.4 Investasi per Kabupaten/Kota",
+            "   2.5 Penyerapan Tenaga Kerja",
+            "3. Perizinan Berusaha Berbasis Risiko",
+            "   3.1 Rekapitulasi Berdasarkan Periode dan Lokasi Usaha di Kabupaten/Kota",
+            "   3.2 Rekapitulasi Berdasarkan Status Penanaman Modal",
+            "   3.3 Rekapitulasi Berdasarkan Tingkat Risiko",
+            "   3.4 Top 10 Sektor Perizinan",
+            "   3.5 Rekapitulasi Jenis Perizinan",
+            "   3.6 Rekapitulasi Status Respon",
+            "   3.7 Rekapitulasi Kewenangan",
+            "4. Kesimpulan",
         ]
         
         for item in toc_items:
@@ -551,11 +628,26 @@ class WordExporter:
     
     def _add_paragraph(self, doc, text: str):
         """Add a body paragraph."""
+        text = self._clean_text(text)
+        if not text:
+            return
         paragraph = doc.add_paragraph()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         run = paragraph.add_run(text)
         run.font.size = Pt(11)
         paragraph.paragraph_format.space_after = Pt(12)
+
+    def _clean_text(self, text: str) -> str:
+        """Convert lightweight HTML/Markdown-ish narrative text to plain Word text."""
+        if text is None:
+            return ""
+        text = str(text)
+        text = re.sub(r"<\s*br\s*/?\s*>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</\s*p\s*>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", "", text)
+        text = html.unescape(text)
+        lines = [line.strip() for line in text.splitlines()]
+        return "\n".join(line for line in lines if line).strip()
     
     def _add_chart_image(self, doc, chart_bytes: bytes, width: float = 6):
         """Add a chart image to the document."""

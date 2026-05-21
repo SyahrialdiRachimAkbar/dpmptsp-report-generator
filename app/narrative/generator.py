@@ -24,9 +24,14 @@ class Narrative:
     kesimpulan: str
     
     # New fields for comprehensive export
+    proyek_rekapitulasi: str = ""
+    proyek_status_pm: str = ""
+    proyek_skala_usaha: str = ""
     investasi_wilayah: str = ""
     investasi_tenaga_kerja: str = ""
     investasi_sektor: str = ""
+    pb_periode_lokasi: str = ""
+    pb_status_pm: str = ""
     pb_jenis: str = ""
     pb_status_respon: str = ""
     pb_kewenangan: str = ""

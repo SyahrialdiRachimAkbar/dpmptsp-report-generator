@@ -3396,6 +3396,79 @@ def render_export_section(report, stats):
                 )
 
 
+def _id_number(value) -> str:
+    """Format numbers using Indonesian thousands separators."""
+    try:
+        return f"{float(value):,.0f}".replace(",", ".")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _export_table_chart(
+    headers,
+    rows,
+    header_color="#1E40AF",
+    body_fill="white",
+    body_text="#000000",
+    width=900,
+    max_height=650,
+):
+    """Create a Plotly table figure for Word export parity."""
+    if not rows:
+        return None
+
+    import plotly.graph_objects as go
+
+    values = list(map(list, zip(*rows)))
+    align = ["center"] * len(headers)
+    if len(headers) > 1:
+        align[1] = "left"
+
+    row_height = 28
+    height = min(max_height, 45 + len(rows) * row_height + 20)
+    fig = go.Figure(data=[go.Table(
+        header=dict(
+            values=[f"<b>{h}</b>" for h in headers],
+            fill_color=header_color,
+            align=align,
+            font=dict(color="white", size=11),
+            height=36,
+        ),
+        cells=dict(
+            values=values,
+            fill_color=body_fill,
+            align=align,
+            font=dict(color=body_text, size=10),
+            height=row_height,
+            line_color="#e2e8f0",
+        ),
+    )])
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=0),
+        width=width,
+        height=height,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+def _add_table_image(charts, key, headers, rows, **kwargs):
+    """Add a Plotly table PNG to the export chart dictionary."""
+    fig = _export_table_chart(headers, rows, **kwargs)
+    if fig is not None:
+        charts[key] = fig.to_image(format="png", scale=2)
+
+
+def _comparison_source(report, comp_ctx, current_data, previous_data):
+    """Return the data source for a previous q-o-q period."""
+    if not comp_ctx.get("qoq_prev_months"):
+        return None
+    if comp_ctx.get("qoq_prev_year_required"):
+        return previous_data
+    return current_data
+
+
 def generate_pdf(report, stats) -> bytes:
     """Generate PDF report with charts and narratives."""
     from app.export.pdf_exporter import EnhancedPDFExporter as PDFExporter
@@ -3667,6 +3740,7 @@ def generate_word(report, stats) -> bytes:
     proyek_data = st.session_state.get('current_proyek_data')
     if proyek_data:
         from app.data.reference_loader import ReferenceDataLoader
+        import plotly.graph_objects as go
         loader = ReferenceDataLoader()
         months = loader.get_months_for_period(report.period_type, report.period_name)
         prev_proyek_data = resolve_reference_data(
@@ -3676,8 +3750,98 @@ def generate_word(report, stats) -> bytes:
             _cached_load_proyek,
             report.year - 1
         )
+
+        prev_q_proyek_source = _comparison_source(report, comp_ctx, proyek_data, prev_proyek_data)
+
+        def get_project_total(data_obj, period_months):
+            if not data_obj:
+                return 0
+            return sum(data_obj.monthly_projects.get(m, 0) for m in period_months)
+
+        # 2.1 Total proyek by period, location, and comparisons
+        monthly_project_data = {
+            month: proyek_data.monthly_projects.get(month, 0)
+            for month in months
+            if proyek_data.monthly_projects.get(month, 0)
+        }
+        if monthly_project_data:
+            fig = chart_gen.create_monthly_bar_with_trendline(
+                monthly_project_data,
+                title=f"Jumlah Proyek Per-Bulan Tahun {report.year}",
+                show_trendline=False
+            )
+            fig.update_traces(marker_color='#3498db', opacity=0.9)
+            fig.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
+            charts['proyek_monthly'] = fig.to_image(format='png', scale=2)
+
+        projects_by_kab = proyek_data.get_period_projects_by_wilayah(months)
+        top_project_location = ("-", 0)
+        if projects_by_kab:
+            sorted_project_locations = dict(sorted(projects_by_kab.items(), key=lambda x: x[1], reverse=True))
+            top_project_location = list(sorted_project_locations.items())[0]
+            fig = go.Figure(data=[go.Bar(
+                x=list(sorted_project_locations.values()),
+                y=list(sorted_project_locations.keys()),
+                orientation='h',
+                marker_color='#4a90e2',
+                text=[_id_number(val) for val in sorted_project_locations.values()],
+                textposition='outside'
+            )])
+            fig.update_layout(
+                title='Jumlah Proyek Berdasarkan Kabupaten/Kota',
+                template='plotly_white',
+                height=max(450, len(sorted_project_locations) * 30 + 80),
+                yaxis={'categoryorder': 'total ascending'},
+                xaxis_title="Jumlah Proyek",
+                margin=dict(l=0, r=40, t=50, b=20)
+            )
+            charts['proyek_kab_kota'] = fig.to_image(format='png', scale=2)
+
+        proyek_total = get_project_total(proyek_data, months)
+        proyek_yoy_curr = get_project_total(proyek_data, comp_ctx['yoy_curr_months'])
+        proyek_yoy_prev = get_project_total(prev_proyek_data, comp_ctx['yoy_prev_months'])
+        proyek_qoq_curr = get_project_total(proyek_data, comp_ctx['qoq_curr_months'])
+        proyek_qoq_prev = get_project_total(prev_q_proyek_source, comp_ctx['qoq_prev_months'])
+
+        if prev_proyek_data:
+            fig = chart_gen.create_comparison_bar_chart(
+                current_val=proyek_yoy_curr,
+                prev_val=proyek_yoy_prev,
+                current_label=comp_ctx['yoy_curr_label'],
+                prev_label=comp_ctx['yoy_prev_label'],
+                title="Jumlah Proyek (y-o-y)"
+            )
+            charts['proyek_total_yoy'] = fig.to_image(format='png', scale=2)
+
+        if prev_q_proyek_source:
+            fig = chart_gen.create_comparison_bar_chart(
+                current_val=proyek_qoq_curr,
+                prev_val=proyek_qoq_prev,
+                current_label=comp_ctx['qoq_curr_label'],
+                prev_label=comp_ctx['qoq_prev_label'],
+                title="Jumlah Proyek (q-o-q)"
+            )
+            charts['proyek_total_qoq'] = fig.to_image(format='png', scale=2)
+
+        yoy_text = "tidak dapat dibandingkan karena data tahun sebelumnya tidak tersedia"
+        if proyek_yoy_prev > 0:
+            yoy_growth = ((proyek_yoy_curr - proyek_yoy_prev) / proyek_yoy_prev) * 100
+            yoy_text = f"{'meningkat' if yoy_growth >= 0 else 'menurun'} sebesar {abs(yoy_growth):.2f}%"
+
+        qoq_text = "tidak dapat dibandingkan karena data periode sebelumnya tidak tersedia"
+        if proyek_qoq_prev > 0:
+            qoq_growth = ((proyek_qoq_curr - proyek_qoq_prev) / proyek_qoq_prev) * 100
+            qoq_text = f"{'meningkat' if qoq_growth >= 0 else 'menurun'} sebesar {abs(qoq_growth):.2f}%"
+
+        narratives.proyek_rekapitulasi = (
+            f"Rekapitulasi jumlah proyek di Provinsi Lampung periode {report.period_name} Tahun {report.year} "
+            f"adalah sebanyak {_id_number(proyek_total)} proyek. Proyek tertinggi berada di lokasi "
+            f"{top_project_location[0]} sebanyak {_id_number(top_project_location[1])} proyek. "
+            f"Jika dibandingkan dengan periode {comp_ctx['yoy_prev_label']}, {comp_ctx['yoy_curr_label']} {yoy_text}. "
+            f"Dibandingkan dengan periode {comp_ctx['qoq_prev_label']}, {comp_ctx['qoq_curr_label']} {qoq_text}."
+        )
         
-        # 2.1 PMA/PMDN Proyek chart
+        # 2.2 PMA/PMDN Proyek chart
         pma_projects = proyek_data.get_period_pma_projects(months)
         pmdn_projects = proyek_data.get_period_pmdn_projects(months)
         if pma_projects > 0 or pmdn_projects > 0:
@@ -3707,34 +3871,31 @@ def generate_word(report, stats) -> bytes:
                  charts['proyek_pm_yoy'] = fig_yoy.to_image(format='png', scale=2)
             
             # QoQ Chart (Section 2.2)
-            # Logic: If TW I -> requires prev year file (handled or skipped), else TW II-IV -> requires current year file but different months
-            # Simplified QoQ logic for export:
-            # Check if we are not in TW I (easier case)
-            if report.period_type == "Triwulan" and report.period_name != "TW I":
-                 # Get prev TW months
-                 current_tw_idx = ["TW I", "TW II", "TW III", "TW IV"].index(report.period_name)
-                 prev_tw_name = ["TW I", "TW II", "TW III", "TW IV"][current_tw_idx - 1]
-                 loader = ReferenceDataLoader() # Helper
-                 prev_tw_months = loader.get_months_for_period("Triwulan", prev_tw_name)
+            if prev_q_proyek_source:
+                 prev_qoq_pma = prev_q_proyek_source.get_period_pma_projects(comp_ctx['qoq_prev_months'])
+                 prev_qoq_pmdn = prev_q_proyek_source.get_period_pmdn_projects(comp_ctx['qoq_prev_months'])
+                 curr_qoq_pma = proyek_data.get_period_pma_projects(comp_ctx['qoq_curr_months'])
+                 curr_qoq_pmdn = proyek_data.get_period_pmdn_projects(comp_ctx['qoq_curr_months'])
                  
-                 # Use CURRENT file data (proyek_data)
-                 prev_qoq_pma = proyek_data.get_period_pma_projects(prev_tw_months)
-                 prev_qoq_pmdn = proyek_data.get_period_pmdn_projects(prev_tw_months)
-                 
-                 if prev_qoq_pma > 0 or prev_qoq_pmdn > 0:
-                     fig_qoq = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=pma_projects,
-                         curr_val2=pmdn_projects,
-                         prev_val1=prev_qoq_pma,
-                         prev_val2=prev_qoq_pmdn,
-                         cat1_label="PMA",
-                         cat2_label="PMDN",
-                         current_period_label=report.period_name,
-                         prev_period_label=prev_tw_name,
-                         title="PMA & PMDN (q-o-q)",
-                         y_axis_title="Jumlah Proyek"
-                     )
-                     charts['proyek_pm_qoq'] = fig_qoq.to_image(format='png', scale=2)
+                 fig_qoq = chart_gen.create_grouped_comparison_two_categories(
+                     curr_val1=curr_qoq_pma,
+                     curr_val2=curr_qoq_pmdn,
+                     prev_val1=prev_qoq_pma,
+                     prev_val2=prev_qoq_pmdn,
+                     cat1_label="PMA",
+                     cat2_label="PMDN",
+                     current_period_label=comp_ctx['qoq_curr_label'],
+                     prev_period_label=comp_ctx['qoq_prev_label'],
+                     title="PMA & PMDN (q-o-q)",
+                     y_axis_title="Jumlah Proyek"
+                 )
+                 charts['proyek_pm_qoq'] = fig_qoq.to_image(format='png', scale=2)
+
+            narratives.proyek_status_pm = narrative_gen.generate_status_pm_narrative(
+                pma_projects,
+                pmdn_projects,
+                unit_type="proyek"
+            )
 
         # 2.3 Skala Usaha chart
 
@@ -3763,29 +3924,34 @@ def generate_word(report, stats) -> bytes:
                     )
                     charts['skala_usaha_yoy'] = fig_yoy_skala.to_image(format='png', scale=2)
             
+            prev_qoq_skala = {}
             # Skala Usaha QoQ
-            if report.period_type == "Triwulan" and report.period_name != "TW I":
-                # Same logic: use current file, prev months
-                current_tw_idx = ["TW I", "TW II", "TW III", "TW IV"].index(report.period_name)
-                prev_tw_name = ["TW I", "TW II", "TW III", "TW IV"][current_tw_idx - 1]
-                loader = ReferenceDataLoader()
-                prev_tw_months = loader.get_months_for_period("Triwulan", prev_tw_name)
-                
-                prev_qoq_skala = proyek_data.get_period_by_skala_usaha(prev_tw_months)
+            if prev_q_proyek_source:
+                prev_qoq_skala = prev_q_proyek_source.get_period_by_skala_usaha(comp_ctx['qoq_prev_months'])
                 if prev_qoq_skala:
                     cols = ['Usaha Mikro', 'Usaha Kecil', 'Usaha Menengah', 'Usaha Besar']
                     prev_qoq_vals = [prev_qoq_skala.get(k, 0) for k in cols]
+                    curr_qoq_skala = proyek_data.get_period_by_skala_usaha(comp_ctx['qoq_curr_months'])
+                    curr_qoq_vals = [curr_qoq_skala.get(k, 0) for k in cols]
                     
                     fig_qoq_skala = chart_gen.create_grouped_comparison_multi_category(
                         categories=[k.replace("Usaha ", "").upper() for k in cols],
-                        current_values=ordered_vals,
+                        current_values=curr_qoq_vals,
                         prev_values=prev_qoq_vals,
-                        current_label=report.period_name,
-                        prev_label=prev_tw_name,
+                        current_label=comp_ctx['qoq_curr_label'],
+                        prev_label=comp_ctx['qoq_prev_label'],
                         title="Jumlah Proyek (q-o-q)",
                         y_axis_title="Jumlah"
                     )
                     charts['skala_usaha_qoq'] = fig_qoq_skala.to_image(format='png', scale=2)
+
+            narratives.proyek_skala_usaha = narrative_gen.generate_skala_usaha_comparison_narrative(
+                current_data=skala_data,
+                prev_year_data=prev_proyek_data.get_period_by_skala_usaha(months) if prev_proyek_data else {},
+                prev_q_data=prev_qoq_skala,
+                period_name=report.period_name,
+                year=report.year
+            )
         
         # 2.4 Investasi per Wilayah (New)
         if hasattr(proyek_data, 'get_period_by_wilayah'):
@@ -3881,6 +4047,7 @@ def generate_word(report, stats) -> bytes:
     pb_data = st.session_state.get('current_pb_data')
     if pb_data:
         from app.data.reference_loader import ReferenceDataLoader
+        import plotly.graph_objects as go
         loader = ReferenceDataLoader()
         months = loader.get_months_for_period(report.period_type, report.period_name)
         prev_pb_data = resolve_reference_data(
@@ -3890,19 +4057,87 @@ def generate_word(report, stats) -> bytes:
             _cached_load_pb_oss,
             report.year - 1
         )
+        prev_q_pb_source = _comparison_source(report, comp_ctx, pb_data, prev_pb_data)
         
         # 3.1 Kab/Kota PB chart
+        monthly_permits = pb_data.get_period_permits_by_month(months) if hasattr(pb_data, 'get_period_permits_by_month') else {}
+        if monthly_permits:
+            fig = chart_gen.create_simple_bar_chart(
+                labels=list(monthly_permits.keys()),
+                values=list(monthly_permits.values()),
+                title="Jumlah Perizinan per Bulan",
+                color='#3498db'
+            )
+            charts['pb_monthly'] = fig.to_image(format='png', scale=2)
+
+        curr_permits = pb_data.get_period_permits(months)
+        yoy_curr_permits = pb_data.get_period_permits(comp_ctx['yoy_curr_months'])
+        prev_year_yoy_permits = prev_pb_data.get_period_permits(comp_ctx['yoy_prev_months']) if prev_pb_data else 0
+        qoq_curr_permits = pb_data.get_period_permits(comp_ctx['qoq_curr_months'])
+        prev_qoq_permits = prev_q_pb_source.get_period_permits(comp_ctx['qoq_prev_months']) if prev_q_pb_source else 0
+
+        if prev_pb_data:
+            fig = chart_gen.create_comparison_bar_chart(
+                current_val=yoy_curr_permits,
+                prev_val=prev_year_yoy_permits,
+                current_label=comp_ctx['yoy_curr_label'],
+                prev_label=comp_ctx['yoy_prev_label'],
+                title="Total Perizinan (y-o-y)"
+            )
+            charts['pb_total_yoy'] = fig.to_image(format='png', scale=2)
+
+        if prev_q_pb_source:
+            fig = chart_gen.create_comparison_bar_chart(
+                current_val=qoq_curr_permits,
+                prev_val=prev_qoq_permits,
+                current_label=comp_ctx['qoq_curr_label'],
+                prev_label=comp_ctx['qoq_prev_label'],
+                title="Total Perizinan (q-o-q)"
+            )
+            charts['pb_total_qoq'] = fig.to_image(format='png', scale=2)
+
         kab_data = pb_data.get_period_by_kab_kota(months)
         if kab_data:
-            sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True)[:15])
-            import plotly.graph_objects as go
+            sorted_kab = dict(sorted(kab_data.items(), key=lambda x: x[1], reverse=True))
             fig = go.Figure(data=[go.Bar(x=list(sorted_kab.values()), y=list(sorted_kab.keys()), orientation='h', marker_color='#3B82F6')])
-            fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_white', height=450, yaxis={'categoryorder': 'total ascending'})
+            fig.update_layout(title='Perizinan per Kabupaten/Kota', template='plotly_white', height=max(450, len(sorted_kab) * 30 + 80), yaxis={'categoryorder': 'total ascending'})
             charts['pb_kab_kota'] = fig.to_image(format='png', scale=2)
+
+            narratives.pb_periode_lokasi = narrative_gen.generate_pb_oss_narrative(
+                report=report,
+                total_permits=curr_permits,
+                monthly_permits=monthly_permits,
+                location_data=kab_data,
+                prev_year_total=prev_year_yoy_permits,
+                prev_q_total=prev_qoq_permits,
+                prev_q_label=comp_ctx['qoq_prev_label']
+            )
+
+            rows = []
+            for idx, (kab_name, total_count) in enumerate(sorted_kab.items(), 1):
+                rows.append(
+                    [idx, kab_name]
+                    + [_id_number(pb_data.monthly_by_kab_kota.get(month, {}).get(kab_name, 0)) for month in months]
+                    + [_id_number(total_count)]
+                )
+            _add_table_image(
+                charts,
+                'pb_kab_table',
+                ['NO', 'KABUPATEN/KOTA'] + [m.upper() for m in months] + ['JUMLAH'],
+                rows
+            )
         
         # 3.2 Status PM PB chart
         pm_pb_data = pb_data.get_period_status_pm(months)
         if pm_pb_data:
+            pm_monthly_breakdown = pb_data.get_monthly_status_pm_breakdown(months)
+            if pm_monthly_breakdown:
+                fig = chart_gen.create_monthly_pm_grouped_chart(
+                    monthly_data=pm_monthly_breakdown,
+                    title="Tren Bulanan (Status PM)"
+                )
+                charts['pb_pm_monthly'] = fig.to_image(format='png', scale=2)
+
             fig = chart_gen.create_pm_comparison_chart(
                 pma_total=pm_pb_data.get('PMA', 0),
                 pmdn_total=pm_pb_data.get('PMDN', 0)
@@ -3911,64 +4146,143 @@ def generate_word(report, stats) -> bytes:
             
             # --- YoY Comparison (Section 3.2) ---
             if prev_pb_data:
-                 prev_pm_pb = prev_pb_data.get_period_status_pm(months)
+                 yoy_pm_curr = pb_data.get_period_status_pm(comp_ctx['yoy_curr_months'])
+                 prev_pm_pb = prev_pb_data.get_period_status_pm(comp_ctx['yoy_prev_months'])
                  fig_yoy_pb_pm = chart_gen.create_grouped_comparison_two_categories(
-                     curr_val1=pm_pb_data.get('PMA', 0),
-                     curr_val2=pm_pb_data.get('PMDN', 0),
+                     curr_val1=yoy_pm_curr.get('PMA', 0),
+                     curr_val2=yoy_pm_curr.get('PMDN', 0),
                      prev_val1=prev_pm_pb.get('PMA', 0),
                      prev_val2=prev_pm_pb.get('PMDN', 0),
                      cat1_label="PMA",
                      cat2_label="PMDN",
-                     current_period_label=f"{report.year}",
-                     prev_period_label=f"{report.year - 1}",
+                     current_period_label=comp_ctx['yoy_curr_label'],
+                     prev_period_label=comp_ctx['yoy_prev_label'],
                      title="Status PM PB (y-o-y)",
                      y_axis_title="Jumlah"
                  )
                  charts['pb_pm_yoy'] = fig_yoy_pb_pm.to_image(format='png', scale=2)
             
             # --- QoQ Comparison (Section 3.2) ---
-            if report.period_type == "Triwulan" and report.period_name != "TW I":
-                # Use current file
-                current_tw_idx = ["TW I", "TW II", "TW III", "TW IV"].index(report.period_name)
-                prev_tw_name = ["TW I", "TW II", "TW III", "TW IV"][current_tw_idx - 1]
-                loader = ReferenceDataLoader()
-                prev_tw_months = loader.get_months_for_period("Triwulan", prev_tw_name)
-                
-                prev_qoq_pb_pm = pb_data.get_period_status_pm(prev_tw_months)
+            prev_qoq_pb_pm = {}
+            qoq_pm_curr = pb_data.get_period_status_pm(comp_ctx['qoq_curr_months'])
+            if prev_q_pb_source:
+                prev_qoq_pb_pm = prev_q_pb_source.get_period_status_pm(comp_ctx['qoq_prev_months'])
                 if prev_qoq_pb_pm:
                      fig_qoq_pb = chart_gen.create_grouped_comparison_two_categories(
-                         curr_val1=pm_pb_data.get('PMA', 0),
-                         curr_val2=pm_pb_data.get('PMDN', 0),
+                         curr_val1=qoq_pm_curr.get('PMA', 0),
+                         curr_val2=qoq_pm_curr.get('PMDN', 0),
                          prev_val1=prev_qoq_pb_pm.get('PMA', 0),
                          prev_val2=prev_qoq_pb_pm.get('PMDN', 0),
                          cat1_label="PMA",
                          cat2_label="PMDN",
-                         current_period_label=report.period_name,
-                         prev_period_label=prev_tw_name,
+                         current_period_label=comp_ctx['qoq_curr_label'],
+                         prev_period_label=comp_ctx['qoq_prev_label'],
                          title="Status PM PB (q-o-q)",
                          y_axis_title="Jumlah"
                      )
                      charts['pb_pm_qoq'] = fig_qoq_pb.to_image(format='png', scale=2)
+
+            narratives.pb_status_pm = narrative_gen.generate_status_pm_comparison_narrative(
+                report=report,
+                curr_pma=pm_pb_data.get('PMA', 0),
+                curr_pmdn=pm_pb_data.get('PMDN', 0),
+                prev_year_pma=prev_pm_pb.get('PMA', 0) if prev_pb_data else 0,
+                prev_year_pmdn=prev_pm_pb.get('PMDN', 0) if prev_pb_data else 0,
+                prev_q_pma=prev_qoq_pb_pm.get('PMA', 0),
+                prev_q_pmdn=prev_qoq_pb_pm.get('PMDN', 0),
+                prev_q_label=comp_ctx['qoq_prev_label'],
+                monthly_breakdown=pm_monthly_breakdown
+            )
+
+            rows = []
+            for idx, (pm_name, total_count) in enumerate(sorted(pm_pb_data.items(), key=lambda x: x[1], reverse=True), 1):
+                rows.append(
+                    [idx, pm_name]
+                    + [_id_number(pb_data.monthly_status_pm.get(month, {}).get(pm_name, 0)) for month in months]
+                    + [_id_number(total_count)]
+                )
+            _add_table_image(
+                charts,
+                'pb_pm_table',
+                ['NO', 'STATUS PM'] + [m.upper() for m in months] + ['JUMLAH'],
+                rows
+            )
         
         # 3.3 Risk Level PB chart
         risk_pb_data = pb_data.get_period_risk(months)
         if risk_pb_data:
             risk_order = ['Rendah', 'Menengah Rendah', 'Menengah Tinggi', 'Tinggi']
             sorted_risk = {k: risk_pb_data.get(k, 0) for k in risk_order if k in risk_pb_data}
-            import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=list(sorted_risk.values()), y=list(sorted_risk.keys()), orientation='h', marker_color=['#10B981', '#FBBF24', '#F59E0B', '#EF4444'])])
             fig.update_layout(title='Perizinan per Tingkat Risiko', template='plotly_white', height=400)
             charts['pb_risk'] = fig.to_image(format='png', scale=2)
+
+            yoy_curr_risk = pb_data.get_period_risk(comp_ctx['yoy_curr_months'])
+            prev_year_yoy_risk = prev_pb_data.get_period_risk(comp_ctx['yoy_prev_months']) if prev_pb_data else {}
+            if prev_pb_data:
+                fig = chart_gen.create_risk_grouped_comparison(
+                    current_data=yoy_curr_risk,
+                    prev_data=prev_year_yoy_risk,
+                    current_label=comp_ctx['yoy_curr_label'],
+                    prev_label=comp_ctx['yoy_prev_label'],
+                    title="Risiko Y-o-Y"
+                )
+                charts['pb_risk_yoy'] = fig.to_image(format='png', scale=2)
+
+            qoq_curr_risk = pb_data.get_period_risk(comp_ctx['qoq_curr_months'])
+            prev_qoq_risk = prev_q_pb_source.get_period_risk(comp_ctx['qoq_prev_months']) if prev_q_pb_source else {}
+            if prev_q_pb_source:
+                fig = chart_gen.create_risk_grouped_comparison(
+                    current_data=qoq_curr_risk,
+                    prev_data=prev_qoq_risk,
+                    current_label=comp_ctx['qoq_curr_label'],
+                    prev_label=comp_ctx['qoq_prev_label'],
+                    title="Risiko Q-o-Q"
+                )
+                charts['pb_risk_qoq'] = fig.to_image(format='png', scale=2)
+
+            narratives.pb_risiko = narrative_gen.generate_risk_comparison_narrative(
+                report=report,
+                current_data=risk_pb_data,
+                prev_year_data=prev_year_yoy_risk,
+                prev_q_data=prev_qoq_risk,
+                prev_q_label=comp_ctx['qoq_prev_label']
+            )
+
+            risk_items = [(risk, risk_pb_data[risk]) for risk in risk_order if risk in risk_pb_data]
+            risk_items.extend((risk, value) for risk, value in risk_pb_data.items() if risk not in risk_order)
+            rows = []
+            for idx, (risk_name, total_count) in enumerate(risk_items, 1):
+                rows.append(
+                    [idx, risk_name]
+                    + [_id_number(pb_data.monthly_risk.get(month, {}).get(risk_name, 0)) for month in months]
+                    + [_id_number(total_count)]
+                )
+            _add_table_image(
+                charts,
+                'pb_risk_table',
+                ['NO', 'TINGKAT RISIKO'] + [m.upper() for m in months] + ['JUMLAH'],
+                rows
+            )
         
         # 3.4 Sector PB chart
         sector_data = pb_data.get_period_sector(months)
         if sector_data:
             sorted_sector = dict(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)[:10])
-            import plotly.graph_objects as go
             fig = go.Figure(data=[go.Bar(x=list(sorted_sector.values()), y=list(sorted_sector.keys()), orientation='h', marker_color='#8B5CF6')])
             fig.update_layout(title='Top 10 Sektor Perizinan', template='plotly_white', height=450, yaxis={'categoryorder': 'total ascending'})
             charts['pb_sector'] = fig.to_image(format='png', scale=2)
             narratives.pb_sektor = f"Sektor {list(sorted_sector.keys())[0]} mendominasi perizinan dengan jumlah {list(sorted_sector.values())[0]} izin." if sorted_sector else ""
+            rows = [
+                [idx, sector_name, _id_number(total_count)]
+                for idx, (sector_name, total_count) in enumerate(sorted(sector_data.items(), key=lambda x: x[1], reverse=True), 1)
+            ]
+            _add_table_image(
+                charts,
+                'pb_sector_table',
+                ['NO', 'SEKTOR KEMENTERIAN/LEMBAGA', 'JUMLAH PERIZINAN'],
+                rows
+            )
 
         # 3.5 Jenis Perizinan
         jenis_data = pb_data.get_period_jenis_perizinan(months)
@@ -3978,6 +4292,19 @@ def generate_word(report, stats) -> bytes:
             fig.update_layout(title='Perizinan per Jenis (Top 10)', template='plotly_white', height=400, yaxis={'categoryorder': 'total ascending'})
             charts['pb_jenis'] = fig.to_image(format='png', scale=2)
             narratives.pb_jenis = f"Jenis perizinan terbanyak adalah {list(sorted_jenis.keys())[0]} dengan {list(sorted_jenis.values())[0]} perizinan." if sorted_jenis else ""
+            rows = []
+            for idx, (jenis_name, total_count) in enumerate(sorted(jenis_data.items(), key=lambda x: x[1], reverse=True), 1):
+                rows.append(
+                    [idx, jenis_name]
+                    + [_id_number(pb_data.monthly_jenis_perizinan.get(month, {}).get(jenis_name, 0)) for month in months]
+                    + [_id_number(total_count)]
+                )
+            _add_table_image(
+                charts,
+                'pb_jenis_table',
+                ['NO', 'JENIS PERIZINAN'] + [m.upper() for m in months] + ['JUMLAH'],
+                rows
+            )
 
         # 3.6 Status Respon
         status_data = pb_data.get_period_status_perizinan(months)
@@ -3994,6 +4321,19 @@ def generate_word(report, stats) -> bytes:
                 pct = count / total_status * 100 if total_status > 0 else 0
                 narrative += f"- Status {status_name} sebanyak {count:,} pemohon ({pct:.1f}%).\n"
             narratives.pb_status_respon = narrative
+            rows = []
+            for idx, (status_name, total_count) in enumerate(sorted(status_data.items(), key=lambda x: x[1], reverse=True), 1):
+                rows.append(
+                    [idx, status_name]
+                    + [_id_number(pb_data.monthly_status_perizinan.get(month, {}).get(status_name, 0)) for month in months]
+                    + [_id_number(total_count)]
+                )
+            _add_table_image(
+                charts,
+                'pb_status_respon_table',
+                ['NO', 'STATUS RESPON'] + [m.upper() for m in months] + ['JUMLAH'],
+                rows
+            )
 
         # 3.7 Kewenangan
         raw_kew_data = pb_data.get_period_kewenangan(months)
@@ -4019,6 +4359,30 @@ def generate_word(report, stats) -> bytes:
              
              top_k = list(top_kew.items())[0] if top_kew else ("-", 0)
              narratives.pb_kewenangan = f"Kewenangan tertinggi berada pada {top_k[0]} dengan {top_k[1]:,} perizinan."
+
+             monthly_kew = {}
+             for month in months:
+                 monthly_kew[month] = {}
+                 for kew, count in pb_data.monthly_kewenangan.get(month, {}).items():
+                     norm_kew = kew.replace("Kab.", "").replace("  ", " ").strip()
+                     norm_lower = norm_kew.lower()
+                     if "lampung" in norm_lower or any(region.lower() in norm_lower for region in target_regions):
+                         monthly_kew[month][norm_kew] = monthly_kew[month].get(norm_kew, 0) + count
+
+             rows = []
+             for idx, (kew, count) in enumerate(sorted(kew_data.items(), key=lambda x: x[1], reverse=True), 1):
+                 rows.append(
+                     [idx, kew]
+                     + [_id_number(monthly_kew.get(month, {}).get(kew, 0)) for month in months]
+                     + [_id_number(count)]
+                 )
+             _add_table_image(
+                 charts,
+                 'pb_kewenangan_table',
+                 ['NO', 'KEWENANGAN'] + [m.upper() for m in months] + ['JUMLAH'],
+                 rows,
+                 max_height=700
+             )
 
     # Create Word exporter
     exporter = WordExporter(logo_path=LOGO_PATH)
